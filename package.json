@@ -1,0 +1,14 @@
+{
+  "name": "brick-chamber-erp",
+  "private": true,
+  "version": "0.1.0",
+  "workspaces": ["backend", "frontend"],
+  "scripts": {
+    "dev:api": "npm run dev --workspace @brick-erp/api",
+    "dev:web": "npm run dev --workspace @brick-erp/web",
+    "db:start": "docker compose up -d db",
+    "db:stop": "docker compose down",
+    "db:migrate": "npm run migrate --workspace @brick-erp/api",
+    "build": "npm run build --workspaces --if-present"
+  }
+}

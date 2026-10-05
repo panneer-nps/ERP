@@ -1,0 +1,30 @@
+\set ON_ERROR_STOP on
+
+SELECT 'CREATE ROLE brick_erp_app LOGIN'
+WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'brick_erp_app')
+\gexec
+
+SELECT EXISTS (SELECT 1 FROM pg_database WHERE datname = 'brick_erp') AS erp_database_exists
+\gset
+\if :erp_database_exists
+  SELECT (datdba = (SELECT oid FROM pg_roles WHERE rolname = 'brick_erp_app')) AS erp_database_owned_by_app
+  FROM pg_database WHERE datname = 'brick_erp'
+  \gset
+  \if :erp_database_owned_by_app
+    \echo 'Existing brick_erp database is owned by brick_erp_app.'
+  \else
+    \echo 'brick_erp exists but is not owned by brick_erp_app. No ownership was changed.'
+    \quit
+  \endif
+\endif
+
+\password brick_erp_app
+
+\if :erp_database_exists
+  \echo 'Reset the brick_erp_app password. Keep DATABASE_URL in backend/.env in sync.'
+\else
+  CREATE DATABASE brick_erp OWNER brick_erp_app;
+  \echo 'Created brick_erp and reset the brick_erp_app password.'
+\endif
+
+\echo 'Set DATABASE_URL in backend/.env to the password you entered above.'
