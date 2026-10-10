@@ -33,7 +33,15 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next-role-profile-build/types/**/*.ts",
+    ".next-role-profile-build/dev/types/**/*.ts",
+    ".next-operations-verify/types/**/*.ts",
+    ".next-operations-verify/dev/types/**/*.ts",
+    ".next-build-verify/types/**/*.ts",
+    ".next-build-verify/dev/types/**/*.ts",
+    ".next-browser-verify/types/**/*.ts",
+    ".next-browser-verify/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

@@ -1,7 +1,9 @@
 node_modules/
 .next/
+.next-build-verify/
 dist/
 coverage/
+backups/
 .env
 .env.*
 !.env.example

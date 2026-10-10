@@ -7,7 +7,9 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "bootstrap-owner": "tsx src/bootstrap-owner.ts",
-    "migrate": "tsx src/migrate.ts"
+    "migrate": "tsx src/migrate.ts",
+    "backup": "tsx scripts/backup-database.ts create",
+    "backup:restore-check": "tsx scripts/backup-database.ts restore-check"
   },
   "dependencies": {
     "cors": "^2.8.5",

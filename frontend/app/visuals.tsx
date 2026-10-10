@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-export type IconName = "globe" | "mail" | "lock" | "building" | "user" | "users" | "handshake" | "plus" | "search" | "arrowRight" | "arrowLeft" | "shield" | "alert" | "home" | "factory" | "boxes" | "chart" | "truck" | "calculator" | "settings" | "shopping" | "clock" | "calendar" | "cash" | "check" | "logout";
+export type IconName = "globe" | "mail" | "lock" | "building" | "user" | "users" | "handshake" | "plus" | "search" | "arrowRight" | "arrowLeft" | "shield" | "alert" | "bell" | "home" | "factory" | "boxes" | "chart" | "truck" | "calculator" | "settings" | "shopping" | "clock" | "calendar" | "cash" | "check" | "download" | "logout" | "receipt";
 
 const iconArt: Record<IconName, ReactNode> = {
   globe: <><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></>,
@@ -16,6 +16,7 @@ const iconArt: Record<IconName, ReactNode> = {
   arrowLeft: <><path d="M20 12H5m6 6-6-6 6-6"/></>,
   shield: <><path d="M12 22s8-4 8-11V5l-8-3-8 3v6c0 7 8 11 8 11Z"/><path d="m9 12 2 2 4-4"/></>,
   alert: <><circle cx="12" cy="12" r="9"/><path d="M12 8v5m0 3h.01"/></>,
+  bell: <><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></>,
   home: <><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-6v-7h-4v7H4a1 1 0 0 1-1-1Z"/></>,
   factory: <><path d="M3 21V9l6 3V8l6 4V5h5v16ZM6 17h2m3 0h2m3 0h2M15 5V3h4v2"/></>,
   boxes: <><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 8 9 5 9-5m-18 0v9l9 5 9-5V8m-9 5v9"/></>,
@@ -28,7 +29,9 @@ const iconArt: Record<IconName, ReactNode> = {
   calendar: <><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18m-13 4h2m4 0h2m-8 3h2"/></>,
   cash: <><rect x="2" y="5" width="20" height="14" rx="2"/><circle cx="12" cy="12" r="3"/><path d="M6 9h.01M18 15h.01"/></>,
   check: <><path d="m5 12 4 4L19 6"/></>,
+  download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5M12 15V3"/></>,
   logout: <><path d="M10 17l5-5-5-5m5 5H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></>,
+  receipt: <><path d="M5 3 7 5l2-2 2 2 2-2 2 2 2-2 2 2v18l-2-2-2 2-2-2-2 2-2-2-2 2Z"/><path d="M9 10h6m-6 4h6m-6 4h4"/></>,
 };
 
 export function Icon({ name, size = 18, className }: { name: IconName; size?: number; className?: string }) {

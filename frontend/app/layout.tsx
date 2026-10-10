@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { LocaleProvider } from "./i18n";
+import { ServiceWorkerRegistration } from "./service-worker-registration";
 import "./styles.css";
 
 export const metadata: Metadata = {
@@ -9,5 +10,5 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
-  return <html lang="en"><body><LocaleProvider>{children}</LocaleProvider></body></html>;
+  return <html lang="en"><body><LocaleProvider><ServiceWorkerRegistration />{children}</LocaleProvider></body></html>;
 }

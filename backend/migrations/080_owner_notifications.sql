@@ -1,0 +1,75 @@
+CREATE TABLE user_notifications (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  company_id uuid NOT NULL,
+  branch_id uuid,
+  recipient_user_id uuid NOT NULL,
+  source_audit_id uuid NOT NULL REFERENCES audit_logs(id) ON DELETE CASCADE,
+  event_type text NOT NULL,
+  title_en text NOT NULL,
+  title_ta text NOT NULL,
+  body_en text NOT NULL,
+  body_ta text NOT NULL,
+  href text NOT NULL,
+  entity_type text NOT NULL,
+  entity_id text,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  read_at timestamptz,
+  FOREIGN KEY (company_id, branch_id) REFERENCES branches(company_id, id),
+  FOREIGN KEY (company_id, recipient_user_id) REFERENCES users(company_id, id),
+  UNIQUE (recipient_user_id, source_audit_id)
+);
+CREATE INDEX user_notifications_inbox_idx ON user_notifications(company_id, recipient_user_id, created_at DESC);
+CREATE INDEX user_notifications_unread_idx ON user_notifications(company_id, recipient_user_id, created_at DESC) WHERE read_at IS NULL;
+
+CREATE FUNCTION notify_owners_from_audit() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+  event_type_value text;
+  title_en_value text;
+  title_ta_value text;
+  body_en_value text;
+  body_ta_value text;
+  href_value text;
+BEGIN
+  CASE NEW.action
+    WHEN 'sales.invoice.post' THEN
+      event_type_value := 'sales_invoice'; title_en_value := 'Sales invoice created'; title_ta_value := 'விற்பனை விலைப்பட்டியல் உருவாக்கப்பட்டது';
+      body_en_value := 'Invoice ' || COALESCE(NEW.after_data->>'invoiceNumber', NEW.entity_id); body_ta_value := 'விலைப்பட்டியல் ' || COALESCE(NEW.after_data->>'invoiceNumber', NEW.entity_id); href_value := '/sales';
+    WHEN 'sales.receipt.post' THEN
+      event_type_value := 'payment_received'; title_en_value := 'Customer payment received'; title_ta_value := 'வாடிக்கையாளர் பணம் பெறப்பட்டது';
+      body_en_value := 'Receipt ' || COALESCE(NEW.after_data->>'receiptNumber', NEW.entity_id); body_ta_value := 'ரசீது ' || COALESCE(NEW.after_data->>'receiptNumber', NEW.entity_id); href_value := '/sales';
+    WHEN 'expense.submit_for_approval' THEN
+      event_type_value := 'expense_approval'; title_en_value := 'Expense needs approval'; title_ta_value := 'செலவுக்கு ஒப்புதல் தேவை';
+      body_en_value := 'An expense was submitted for review.'; body_ta_value := 'ஒரு செலவு ஒப்புதலுக்காக அனுப்பப்பட்டுள்ளது.'; href_value := '/approvals';
+    WHEN 'loading.create' THEN
+      event_type_value := 'loading_started'; title_en_value := 'Loading started'; title_ta_value := 'ஏற்றுதல் தொடங்கியது';
+      body_en_value := 'A new delivery loading session is open.'; body_ta_value := 'புதிய விநியோக ஏற்றுதல் பதிவு தொடங்கப்பட்டது.'; href_value := '/loading';
+    WHEN 'loading.complete' THEN
+      event_type_value := 'loading_completed'; title_en_value := 'Loading completed'; title_ta_value := 'ஏற்றுதல் முடிந்தது';
+      body_en_value := 'A loading session is ready for verification.'; body_ta_value := 'ஏற்றுதல் சரிபார்ப்புக்கு தயாராக உள்ளது.'; href_value := '/loading';
+    WHEN 'loading.verify' THEN
+      event_type_value := 'loading_verified'; title_en_value := 'Loading verified'; title_ta_value := 'ஏற்றுதல் சரிபார்க்கப்பட்டது';
+      body_en_value := 'A loading verification was recorded.'; body_ta_value := 'ஏற்றுதல் சரிபார்ப்பு பதிவு செய்யப்பட்டது.'; href_value := '/loading';
+    WHEN 'loading.mismatch.approve' THEN
+      event_type_value := 'loading_mismatch'; title_en_value := 'Loading mismatch requires attention'; title_ta_value := 'ஏற்றுதல் வேறுபாட்டை கவனிக்கவும்';
+      body_en_value := 'A loading quantity mismatch was approved.'; body_ta_value := 'ஏற்றுதல் அளவு வேறுபாடு ஒப்புதல் பெறப்பட்டது.'; href_value := '/loading';
+    WHEN 'delivery.dispatch' THEN
+      event_type_value := 'delivery_dispatched'; title_en_value := 'Delivery dispatched'; title_ta_value := 'விநியோகம் அனுப்பப்பட்டது';
+      body_en_value := 'A verified delivery left the yard.'; body_ta_value := 'சரிபார்க்கப்பட்ட சரக்கு புறப்பட்டது.'; href_value := '/loading';
+    WHEN 'delivery.complete' THEN
+      event_type_value := 'delivery_completed'; title_en_value := 'Delivery completed'; title_ta_value := 'விநியோகம் முடிந்தது';
+      body_en_value := 'A delivery was marked complete.'; body_ta_value := 'ஒரு விநியோகம் முடிந்ததாக பதிவு செய்யப்பட்டது.'; href_value := '/loading';
+    WHEN 'production.batch.complete' THEN
+      event_type_value := 'production_completed'; title_en_value := 'Production batch completed'; title_ta_value := 'உற்பத்தித் தொகுதி முடிந்தது';
+      body_en_value := 'Saleable production was posted to stock.'; body_ta_value := 'விற்பனைக்கான உற்பத்தி சரக்கில் பதிவு செய்யப்பட்டது.'; href_value := '/production';
+    ELSE RETURN NEW;
+  END CASE;
+
+  INSERT INTO user_notifications(company_id, branch_id, recipient_user_id, source_audit_id, event_type, title_en, title_ta, body_en, body_ta, href, entity_type, entity_id)
+  SELECT NEW.company_id, NEW.branch_id, ur.user_id, NEW.id, event_type_value, title_en_value, title_ta_value, body_en_value, body_ta_value, href_value, NEW.entity_type, NEW.entity_id
+  FROM user_roles ur JOIN roles r ON r.company_id=ur.company_id AND r.id=ur.role_id JOIN users u ON u.company_id=ur.company_id AND u.id=ur.user_id
+  WHERE ur.company_id=NEW.company_id AND r.code='owner' AND u.active=true
+  ON CONFLICT (recipient_user_id, source_audit_id) DO NOTHING;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER audit_owner_notifications AFTER INSERT ON audit_logs FOR EACH ROW EXECUTE FUNCTION notify_owners_from_audit();

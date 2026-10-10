@@ -17,6 +17,7 @@ export default function Setup() {
   const [password, setPassword] = useState("");
   const [confirmation, setConfirmation] = useState("");
   const [error, setError] = useState<TranslationKey | null>(null);
+  const [serverError, setServerError] = useState("");
   const [complete, setComplete] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -33,6 +34,7 @@ export default function Setup() {
   async function createOwner(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
+    setServerError("");
     if (password !== confirmation) { setError("passwordMismatch"); return; }
     setBusy(true);
     try {
@@ -43,7 +45,12 @@ export default function Setup() {
       });
       const data = await response.json();
       if (!response.ok) {
-        setError(data.error?.code === "SETUP_COMPLETE" ? "setupAlreadyComplete" : "setupFailed");
+        if (data.error?.code === "SETUP_COMPLETE") setError("setupAlreadyComplete");
+        else if (data.error?.code === "DUPLICATE_VALUE") setError("setupDuplicate");
+        else if (data.error?.code === "SERVICE_UNAVAILABLE") setError("databaseUnavailable");
+        else if (data.error?.code === "MIGRATIONS_REQUIRED") setError("migrationsRequired");
+        else if (data.error?.code === "DATA_CONFLICT") setError("databaseConflict");
+        else setServerError(typeof data.error?.message === "string" ? data.error.message : t("setupFailed"));
         return;
       }
       setComplete(true);
@@ -70,7 +77,7 @@ export default function Setup() {
           <div className="eyebrow muted">{t("firstSetup")}</div>
           <h2>{complete ? t("workspaceCreated") : t("createOwnerTitle")}</h2>
           <p className="subcopy">{complete ? t("ownerAccountReady") : t("setupExplanation")}</p>
-          {complete ? <Link className="primary-link" href="/">{t("goToSignIn")} <Icon name="arrowRight" size={18} /></Link> : setupRequired === false ? <div className="setup-closed" role="status"><Icon name="shield" size={18} />{t("setupAlreadyComplete")}</div> : (
+          {complete ? <Link className="primary-link" href="/">{t("goToSignIn")} <Icon name="arrowRight" size={18} /></Link> : setupRequired === false ? <div className="setup-closed" role="status"><Icon name="shield" size={18} />{t("setupAlreadyComplete")}</div> : setupRequired === null ? (error ? null : <div className="setup-closed" role="status"><Icon name="clock" size={18} />{t("loadingWorkspace")}</div>) : (
             <form onSubmit={createOwner}>
               <label className="field-label" htmlFor="company"><Icon name="building" size={15} />{t("companyName")}</label>
               <input id="company" autoComplete="organization" required minLength={2} maxLength={160} value={companyName} onChange={(event) => setCompanyName(event.target.value)} />
@@ -82,11 +89,12 @@ export default function Setup() {
               <input id="setup-password" type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} />
               <label className="field-label" htmlFor="confirm-password"><Icon name="shield" size={15} />{t("confirmPassword")}</label>
               <input id="confirm-password" type="password" autoComplete="new-password" required minLength={12} maxLength={128} value={confirmation} onChange={(event) => setConfirmation(event.target.value)} />
-              {error && setupRequired !== null && <div className="form-error" role="alert"><Icon name="alert" size={16} />{t(error)}</div>}
+              {(error || serverError) && setupRequired !== null && <div className="form-error" role="alert"><Icon name="alert" size={16} />{error ? t(error) : serverError}</div>}
               <button className="action-button" type="submit" disabled={busy || setupRequired !== true}>{busy ? t("creatingWorkspace") : t("createOwner")}<Icon name="arrowRight" size={19} /></button>
             </form>
           )}
           {!complete && error && setupRequired === null && <div className="form-error setup-status-error" role="alert"><Icon name="alert" size={16}/>{t(error)}</div>}
+          {!complete && <p className="setup-account-note"><Icon name="users" size={16} />{t("setupRolesNote")}</p>}
           <p className="signup-note"><Link href="/"><Icon name="arrowLeft" size={14} />{t("backToSignIn")}</Link></p>
         </div>
       </section>

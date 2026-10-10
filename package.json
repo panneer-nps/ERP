@@ -9,6 +9,8 @@
     "db:start": "docker compose up -d db",
     "db:stop": "docker compose down",
     "db:migrate": "npm run migrate --workspace @brick-erp/api",
+    "db:backup": "npm run backup --workspace @brick-erp/api",
+    "db:restore-check": "npm run backup:restore-check --workspace @brick-erp/api --",
     "build": "npm run build --workspaces --if-present"
   }
 }

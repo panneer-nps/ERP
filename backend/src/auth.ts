@@ -74,21 +74,29 @@ export async function requireAuth(req: Request, res: Response, next: NextFunctio
   try {
     const result = await pool.query<{
       id: string; user_id: string; company_id: string; branch_id: string | null;
+      is_owner: boolean; assigned_branch_ids: string[]; active_branch_count: number;
     }>(
-      `SELECT s.id, s.user_id, s.company_id, s.branch_id
-       FROM sessions s JOIN users u ON u.id = s.user_id
-       WHERE s.token_hash = $1 AND s.revoked_at IS NULL AND s.expires_at > now() AND u.active = true`,
+      `SELECT s.id,s.user_id,s.company_id,s.branch_id,
+        EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.company_id=ur.company_id AND r.id=ur.role_id WHERE ur.company_id=s.company_id AND ur.user_id=s.user_id AND r.code='owner') AS is_owner,
+        ARRAY(SELECT ub.branch_id FROM user_branches ub JOIN branches b ON b.company_id=ub.company_id AND b.id=ub.branch_id WHERE ub.company_id=s.company_id AND ub.user_id=s.user_id AND b.active=true ORDER BY ub.branch_id) AS assigned_branch_ids,
+        (SELECT count(*)::int FROM branches b WHERE b.company_id=s.company_id AND b.active=true) AS active_branch_count
+       FROM sessions s JOIN users u ON u.id=s.user_id
+       WHERE s.token_hash=$1 AND s.revoked_at IS NULL AND s.expires_at>now() AND u.active=true`,
       [hashToken(token)],
     );
-    const session = result.rows[0];
+    const session=result.rows[0];
     if (!session) return res.status(401).json({ error: { code: "SESSION_INVALID", message: "Your session has expired. Sign in again." } });
-    req.auth = { userId: session.user_id, companyId: session.company_id, branchId: session.branch_id, sessionId: session.id };
+    const branchIds=session.assigned_branch_ids;
+    let branchId=session.branch_id;
+    const branchPicker=req.path==="/api/auth/branches"||req.path==="/api/auth/branch";
+    if(branchId&&!session.is_owner&&!branchIds.includes(branchId))return res.status(403).json({error:{code:"BRANCH_ACCESS_DENIED",message:"Your account is not assigned to this branch. Sign in again or contact an administrator."}});
+    if(!session.is_owner&&session.active_branch_count>0&&branchIds.length===0)return res.status(403).json({error:{code:"BRANCH_ACCESS_UNASSIGNED",message:"An administrator must assign your account to a branch before you can access branch data."}});
+    if(!branchId&&!session.is_owner&&branchIds.length===1){branchId=branchIds[0];await pool.query("UPDATE sessions SET branch_id=$2 WHERE id=$1 AND branch_id IS NULL",[session.id,branchId]);}
+    if(!branchId&&!session.is_owner&&branchIds.length>1&&!branchPicker)return res.status(409).json({error:{code:"BRANCH_SELECTION_REQUIRED",message:"Choose a branch to continue."}});
+    req.auth={userId:session.user_id,companyId:session.company_id,branchId,sessionId:session.id};
     return next();
-  } catch (error) {
-    return next(error);
-  }
+  } catch (error) { return next(error); }
 }
-
 export function requirePermission(permissionCode: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     if (!req.auth) return res.status(401).json({ error: { code: "UNAUTHENTICATED", message: "Sign in is required." } });
@@ -106,4 +114,17 @@ export function requirePermission(permissionCode: string) {
       return next(error);
     }
   };
+}
+
+export async function requireOwnerRole(req: Request, res: Response, next: NextFunction) {
+  if (!req.auth) return res.status(401).json({ error: { code: "UNAUTHENTICATED", message: "Sign in is required." } });
+  try {
+    const result = await pool.query(
+      `SELECT 1 FROM user_roles ur JOIN roles r ON r.company_id=ur.company_id AND r.id=ur.role_id
+       WHERE ur.user_id=$1 AND ur.company_id=$2 AND r.code='owner' LIMIT 1`,
+      [req.auth.userId, req.auth.companyId],
+    );
+    if (!result.rowCount) return res.status(403).json({ error: { code: "OWNER_REQUIRED", message: "Only a company Owner can perform this action." } });
+    return next();
+  } catch (error) { return next(error); }
 }
