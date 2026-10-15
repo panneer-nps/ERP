@@ -41,6 +41,19 @@ The browser sends API calls to the same origin (`/api`). Next.js forwards them t
 
 For native PostgreSQL database setup and encrypted backup/restore instructions, see [`backend/README.md`](backend/README.md).
 
+## Deploy the API on Render
+
+Use the repository root as the service working directory (leave Render's **Root Directory** empty). The API is an npm workspace and uses the root `package-lock.json`.
+
+| Setting | Value |
+| --- | --- |
+| Build Command | `npm ci --include=dev && npm run build:api` |
+| Start Command | `npm run start --workspace @brick-erp/api` |
+
+The build must compile TypeScript before startup. It generates `backend/dist/server.js`; `dist/` is intentionally ignored by Git. Installing dependencies alone does not generate this file and causes `MODULE_NOT_FOUND` at startup. `--include=dev` installs the TypeScript compiler even when `NODE_ENV=production` is set. After saving these settings, deploy the commit containing the build command.
+
+Configure the API environment using `backend/.env.example` as the reference, including the production database connection and secrets. Set `NODE_ENV=production` and `API_HOST=0.0.0.0` (the example file uses loopback for local development). Render supplies `PORT`, which the API already reads. Configure the separately hosted web app's `ERP_API_INTERNAL_URL` to point to the deployed API origin. Database initialization and migrations remain a separate operation; compiling the API does not apply migrations.
+
 ## First login and company setup
 
 - `/setup` is available only when the database contains no company. It creates the company and its first Owner account; public sign-up closes after that.

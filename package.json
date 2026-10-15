@@ -18,6 +18,7 @@
     "verify:localization": "node frontend/scripts/verify-localization-parity.mjs",
     "verify:localized-errors": "tsx --tsconfig frontend/tsconfig.json frontend/scripts/verify-localized-errors.ts",
     "verify:bank-import": "node --import tsx frontend/scripts/verify-bank-statement-import.mjs",
+    "build:api": "npm run build --workspace @brick-erp/api",
     "build": "npm run build --workspaces --if-present"
   }
 }
