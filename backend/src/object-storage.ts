@@ -10,31 +10,39 @@ type StorageConfig = {
 };
 
 function config(): StorageConfig | null {
+  // Neon Object Storage's connection panel provides AWS_* variable names.
+  // Keep the ERP-specific names as the documented defaults, but accept the
+  // standard S3 names too so the Neon values can be pasted into deployment env.
+  const endpointValue = process.env.OBJECT_STORAGE_ENDPOINT || process.env.AWS_ENDPOINT_URL_S3;
+  const bucketValue = process.env.OBJECT_STORAGE_BUCKET || process.env.AWS_BUCKET_NAME || process.env.AWS_S3_BUCKET;
+  const regionValue = process.env.OBJECT_STORAGE_REGION || process.env.AWS_REGION;
+  const accessKeyId = process.env.OBJECT_STORAGE_ACCESS_KEY_ID || process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY || process.env.AWS_SECRET_ACCESS_KEY;
   const values = [
-    process.env.OBJECT_STORAGE_ENDPOINT,
-    process.env.OBJECT_STORAGE_BUCKET,
-    process.env.OBJECT_STORAGE_REGION,
-    process.env.OBJECT_STORAGE_ACCESS_KEY_ID,
-    process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY,
+    endpointValue,
+    bucketValue,
+    regionValue,
+    accessKeyId,
+    secretAccessKey,
   ];
   if (values.every((value) => !value)) return null;
   if (values.some((value) => !value)) throw new Error("Object storage configuration is incomplete.");
-  const endpoint = new URL(process.env.OBJECT_STORAGE_ENDPOINT!);
+  const endpoint = new URL(endpointValue!);
   if (endpoint.protocol !== "https:" && process.env.NODE_ENV === "production") {
     throw new Error("Object storage must use HTTPS in production.");
   }
   if (endpoint.username || endpoint.password || endpoint.search || endpoint.hash) {
     throw new Error("Object storage endpoint must not contain credentials, a query, or a fragment.");
   }
-  const bucket = process.env.OBJECT_STORAGE_BUCKET!;
+  const bucket = bucketValue!;
   if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucket)) throw new Error("Object storage bucket name is invalid.");
   return {
     endpoint,
     bucket,
-    region: process.env.OBJECT_STORAGE_REGION!,
-    accessKeyId: process.env.OBJECT_STORAGE_ACCESS_KEY_ID!,
-    secretAccessKey: process.env.OBJECT_STORAGE_SECRET_ACCESS_KEY!,
-    sessionToken: process.env.OBJECT_STORAGE_SESSION_TOKEN || undefined,
+    region: regionValue!,
+    accessKeyId: accessKeyId!,
+    secretAccessKey: secretAccessKey!,
+    sessionToken: process.env.OBJECT_STORAGE_SESSION_TOKEN || process.env.AWS_SESSION_TOKEN || undefined,
   };
 }
 
