@@ -6,11 +6,18 @@
   "scripts": {
     "dev:api": "npm run dev --workspace @brick-erp/api",
     "dev:web": "npm run dev --workspace @brick-erp/web",
+    "local:start": "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/start-local.ps1",
+    "local:stop": "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/stop-local.ps1",
     "db:start": "docker compose up -d db",
     "db:stop": "docker compose down",
     "db:migrate": "npm run migrate --workspace @brick-erp/api",
+    "db:status": "npm run status --workspace @brick-erp/api",
     "db:backup": "npm run backup --workspace @brick-erp/api",
     "db:restore-check": "npm run backup:restore-check --workspace @brick-erp/api --",
+    "verify:backup-tools": "node --import tsx backend/scripts/verify-backup-tool-discovery.ts",
+    "verify:localization": "node frontend/scripts/verify-localization-parity.mjs",
+    "verify:localized-errors": "tsx --tsconfig frontend/tsconfig.json frontend/scripts/verify-localized-errors.ts",
+    "verify:bank-import": "node --import tsx frontend/scripts/verify-bank-statement-import.mjs",
     "build": "npm run build --workspaces --if-present"
   }
 }

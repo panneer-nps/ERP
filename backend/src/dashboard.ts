@@ -17,16 +17,17 @@ dashboardRouter.get("/summary", requireAuth, async (req, res, next) => {
       SELECT 1 FROM user_roles ur JOIN roles r ON r.company_id=ur.company_id AND r.id=ur.role_id JOIN role_permissions rp ON rp.role_id=r.id JOIN permissions p ON p.id=rp.permission_id
       WHERE ur.company_id=$1 AND ur.user_id=$2 AND p.code IN ('expenses.approve','stocktake.approve','cash.close.approve','loading.approve','brokers.commission.approve','sales.approve','employees.advance.approve','accounting.journal.approve','payroll.approve')
     ) allowed`, [companyId, req.auth!.userId]);
-    const access = await pool.query<{ sales:boolean; expenses:boolean; stock:boolean; production:boolean; chambers:boolean; accounting:boolean }>(`SELECT
+    const access = await pool.query<{ sales:boolean; expenses:boolean; stock:boolean; production:boolean; chambers:boolean; accounting:boolean; owner:boolean }>(`SELECT
       bool_or(p.code='sales.view') AS sales,bool_or(p.code='expenses.view') AS expenses,
       bool_or(p.code IN ('stock.view','inventory.valuation.view')) AS stock,bool_or(p.code='production.view') AS production,
-      bool_or(p.code IN ('masters.view','chambers.status.manage')) AS chambers,bool_or(p.code='accounting.view') AS accounting
+      bool_or(p.code IN ('masters.view','chambers.status.manage')) AS chambers,bool_or(p.code='accounting.view') AS accounting,
+      bool_or(r.code='owner') AS owner
       FROM user_roles ur JOIN roles r ON r.company_id=ur.company_id AND r.id=ur.role_id JOIN role_permissions rp ON rp.role_id=r.id JOIN permissions p ON p.id=rp.permission_id
       WHERE ur.company_id=$1 AND ur.user_id=$2`, [companyId,req.auth!.userId]);
 
     const [activity, stock, production, chambers] = await Promise.all([
       pool.query(`WITH invoices AS (
-        SELECT i.id,i.total,
+        SELECT i.company_id,i.id,i.total,
           COALESCE((SELECT SUM(r.amount) FROM customer_receipts r WHERE r.company_id=i.company_id AND r.invoice_id=i.id),0)+COALESCE((SELECT SUM(a.amount) FROM customer_receipt_allocations a WHERE a.company_id=i.company_id AND a.target_invoice_id=i.id),0) paid,
           COALESCE((SELECT SUM(r.total) FROM sales_returns r WHERE r.company_id=i.company_id AND r.invoice_id=i.id),0) returned,
           COALESCE((SELECT SUM(a.amount) FROM customer_credit_applications a WHERE a.company_id=i.company_id AND a.target_invoice_id=i.id),0) credits,
@@ -37,7 +38,7 @@ dashboardRouter.get("/summary", requireAuth, async (req, res, next) => {
         (SELECT COALESCE(SUM(i.total),0)::numeric(14,2) FROM sales_invoices i WHERE i.company_id=$1 AND i.status='posted' AND i.invoice_date >= $3::date AND i.invoice_date <= $4::date AND ($2::uuid IS NULL OR i.branch_id IS NULL OR i.branch_id=$2)) AS sales,
         COALESCE((SELECT SUM(r.amount) FROM customer_receipts r WHERE r.company_id=$1 AND r.receipt_date >= $3::date AND r.receipt_date <= $4::date AND ($2::uuid IS NULL OR r.branch_id IS NULL OR r.branch_id=$2)),0)::numeric(14,2) AS collections,
         COALESCE((SELECT SUM(e.amount) FROM expenses e WHERE e.company_id=$1 AND e.status='posted' AND e.expense_date >= $3::date AND e.expense_date <= $4::date AND ($2::uuid IS NULL OR e.branch_id IS NULL OR e.branch_id=$2)),0)::numeric(14,2) AS expenses,
-        COALESCE((SELECT SUM(GREATEST(i.total-v.paid-v.returned-v.credits+v.source_credits+v.refunds,0)) FROM sales_invoices i JOIN invoices v ON v.id=i.id WHERE i.status='posted'),0)::numeric(14,2) AS receivables`, [companyId, branchId, req.query.from, req.query.to]),
+        COALESCE((SELECT SUM(GREATEST(i.total-v.paid-v.returned-v.credits+v.source_credits+v.refunds,0)) FROM sales_invoices i JOIN invoices v ON v.company_id=i.company_id AND v.id=i.id WHERE i.company_id=$1 AND i.status='posted' AND ($2::uuid IS NULL OR i.branch_id IS NULL OR i.branch_id=$2)),0)::numeric(14,2) AS receivables`, [companyId, branchId, req.query.from, req.query.to]),
       pool.query(`WITH balances AS (
         SELECT sm.product_id,sm.quality,sm.location_id,SUM(CASE WHEN sm.direction='in' THEN sm.quantity ELSE -sm.quantity END) qty
         FROM stock_movements sm JOIN stock_locations sl ON sl.company_id=sm.company_id AND sl.id=sm.location_id
@@ -62,6 +63,45 @@ dashboardRouter.get("/summary", requireAuth, async (req, res, next) => {
         FROM chambers WHERE company_id=$1 AND active=true`, [companyId]),
     ]);
 
+    let ownerPulse: null | {
+      supplierPayable:string;cashBalance:string;bankBalance:string;employeeAdvanceBalance:string;salaryPayable:string;
+      brokerPayable:string;activeLoadings:number;loadingMismatches:number;asOfDate:string;scope:"company"|"branch";
+    } = null;
+    if (access.rows[0].owner) {
+      const [balances, operations] = await Promise.all([
+        pool.query(`SELECT
+          COALESCE(SUM(jl.debit-jl.credit) FILTER(WHERE a.code='1110'),0)::numeric(14,2)::text AS "cashBalance",
+          COALESCE(SUM(jl.debit-jl.credit) FILTER(WHERE a.code='1120'),0)::numeric(14,2)::text AS "bankBalance",
+          COALESCE(SUM(jl.credit-jl.debit) FILTER(WHERE a.code='2100'),0)::numeric(14,2)::text AS "supplierPayable",
+          COALESCE(SUM(jl.debit-jl.credit) FILTER(WHERE a.code='1400'),0)::numeric(14,2)::text AS "employeeAdvanceBalance",
+          COALESCE(SUM(jl.credit-jl.debit) FILTER(WHERE a.code='2500'),0)::numeric(14,2)::text AS "salaryPayable"
+          FROM journal_entry_lines jl JOIN journal_entries je ON je.company_id=jl.company_id AND je.id=jl.journal_entry_id
+          JOIN accounts a ON a.company_id=jl.company_id AND a.id=jl.account_id
+          WHERE je.company_id=$1 AND je.effective_date<=$3::date AND ($2::uuid IS NULL OR je.branch_id=$2)`,
+        [companyId, branchId, to]),
+        pool.query(`SELECT
+          (SELECT COUNT(*)::int FROM loading_sessions l WHERE l.company_id=$1 AND l.status NOT IN ('delivered','cancelled')
+            AND l.started_at < ($4::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+            AND ($2::uuid IS NULL OR l.branch_id=$2)) AS "activeLoadings",
+          (SELECT COUNT(*)::int FROM loading_sessions l WHERE l.company_id=$1 AND l.status='mismatch'
+            AND l.started_at >= $3::date::timestamp AT TIME ZONE 'Asia/Kolkata'
+            AND l.started_at < ($4::date + 1)::timestamp AT TIME ZONE 'Asia/Kolkata'
+            AND ($2::uuid IS NULL OR l.branch_id=$2)) AS "loadingMismatches",
+          COALESCE((SELECT SUM(bc.accrued_amount-COALESCE(p.paid,0)) FROM broker_commissions bc
+            JOIN sales_invoices i ON i.company_id=bc.company_id AND i.id=bc.invoice_id
+            LEFT JOIN LATERAL(SELECT SUM(bp.amount) paid FROM broker_commission_payments bp WHERE bp.company_id=bc.company_id AND bp.commission_id=bc.id) p ON true
+            WHERE bc.company_id=$1 AND i.status='posted' AND bc.cancelled_at IS NULL AND i.invoice_date<=$4::date
+              AND ($2::uuid IS NULL OR i.branch_id=$2)),0)::numeric(14,2)::text AS "brokerPayable"`,
+        [companyId, branchId, from, to]),
+      ]);
+      ownerPulse = {
+        ...balances.rows[0],
+        ...operations.rows[0],
+        asOfDate: to,
+        scope: branchId ? "branch" : "company",
+      };
+    }
+
     let pendingApprovals: number | null = null;
     if (canReview.rows[0].allowed) {
       const approvals = await pool.query(`SELECT COUNT(*)::int count FROM (
@@ -80,6 +120,7 @@ dashboardRouter.get("/summary", requireAuth, async (req, res, next) => {
 
     const permissions=access.rows[0];
     return res.json({
+      branchId,
       sales: permissions.sales||permissions.accounting ? activity.rows[0].sales : null,
       collections: permissions.sales||permissions.accounting ? activity.rows[0].collections : null,
       receivables: permissions.sales||permissions.accounting ? activity.rows[0].receivables : null,
@@ -87,6 +128,7 @@ dashboardRouter.get("/summary", requireAuth, async (req, res, next) => {
       stock: permissions.stock ? stock.rows[0] : null,
       production: permissions.production ? production.rows[0] : null,
       chambers: permissions.chambers||permissions.production ? chambers.rows[0] : null,
+      ownerPulse,
       pendingApprovals, from, to,
     });
   } catch (error) { return next(error); }

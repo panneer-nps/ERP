@@ -5,8 +5,8 @@ import { pool } from "./db";
 
 export const notificationsRouter=express.Router();
 notificationsRouter.use(requireAuth);
-const preferenceSchema=z.object({sales_invoice:z.boolean(),payment_received:z.boolean(),expense_approval:z.boolean(),loading_started:z.boolean(),loading_completed:z.boolean(),loading_verified:z.boolean(),loading_mismatch:z.boolean(),delivery_dispatched:z.boolean(),delivery_completed:z.boolean(),production_completed:z.boolean(),low_stock:z.boolean()}).strict();
-const defaultPreferences={sales_invoice:true,payment_received:true,expense_approval:true,loading_started:true,loading_completed:true,loading_verified:true,loading_mismatch:true,delivery_dispatched:true,delivery_completed:true,production_completed:true,low_stock:true};
+const preferenceSchema=z.object({sales_invoice:z.boolean(),payment_received:z.boolean(),expense_approval:z.boolean(),employee_advance:z.boolean(),broker_commission_pending:z.boolean(),approval_request:z.boolean(),loading_started:z.boolean(),loading_completed:z.boolean(),loading_verified:z.boolean(),loading_mismatch:z.boolean(),delivery_dispatched:z.boolean(),delivery_completed:z.boolean(),production_completed:z.boolean(),low_stock:z.boolean()}).strict();
+const defaultPreferences={sales_invoice:true,payment_received:true,expense_approval:true,employee_advance:true,broker_commission_pending:true,approval_request:true,loading_started:true,loading_completed:true,loading_verified:true,loading_mismatch:true,delivery_dispatched:true,delivery_completed:true,production_completed:true,low_stock:true};
 async function isOwner(companyId:string,userId:string){const result=await pool.query<{owner:boolean}>(`SELECT EXISTS(SELECT 1 FROM user_roles ur JOIN roles r ON r.company_id=ur.company_id AND r.id=ur.role_id WHERE ur.company_id=$1 AND ur.user_id=$2 AND r.code='owner') owner`,[companyId,userId]);return result.rows[0]?.owner===true;}
 
 notificationsRouter.post("/sync-low-stock",requirePermission("stock.view"),async(req,res,next)=>{

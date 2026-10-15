@@ -2,6 +2,7 @@ import "dotenv/config";
 import { randomUUID } from "node:crypto";
 import { createPasswordHash } from "../src/auth";
 import { pool } from "../src/db";
+import { assertDisposableVerificationTarget, assertLocalVerificationApi } from "./verification-target";
 
 const api=process.env.ERP_VERIFY_API_URL??"http://127.0.0.1:4000";
 async function cleanAbandonedVerificationUsers(){
@@ -9,6 +10,8 @@ async function cleanAbandonedVerificationUsers(){
   for(const user of stale.rows){const client=await pool.connect();try{await client.query("BEGIN");await client.query("DELETE FROM audit_logs WHERE company_id=$1 AND actor_user_id=$2",[user.company_id,user.id]);await client.query("DELETE FROM user_notifications WHERE company_id=$1 AND recipient_user_id=$2",[user.company_id,user.id]);await client.query(`DELETE FROM company_settings WHERE company_id=$1 AND key='notification_preferences' AND updated_by=$2`,[user.company_id,user.id]);await client.query("DELETE FROM sessions WHERE company_id=$1 AND user_id=$2",[user.company_id,user.id]);await client.query("DELETE FROM user_roles WHERE company_id=$1 AND user_id=$2",[user.company_id,user.id]);await client.query("DELETE FROM users WHERE company_id=$1 AND id=$2",[user.company_id,user.id]);await client.query("COMMIT");}catch(error){await client.query("ROLLBACK");throw error;}finally{client.release();}}
 }
 async function main(){
+  assertDisposableVerificationTarget();
+  assertLocalVerificationApi(api);
   await cleanAbandonedVerificationUsers();
   const owner=await pool.query<{id:string;company_id:string}>(`SELECT u.id,u.company_id FROM users u JOIN user_roles ur ON ur.company_id=u.company_id AND ur.user_id=u.id JOIN roles r ON r.company_id=ur.company_id AND r.id=ur.role_id WHERE r.code='owner' AND u.active=true ORDER BY u.created_at LIMIT 1`);
   if(!owner.rowCount)throw new Error("No active owner exists for verification.");

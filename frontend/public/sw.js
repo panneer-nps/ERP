@@ -1,11 +1,30 @@
-const CACHE_NAME = "brick-erp-shell-v1";
+const CACHE_NAME = "brick-erp-shell-v2";
 const OFFLINE_ROUTE = "/offline";
 const DASHBOARD_ROUTE = "/dashboard";
+
+async function cacheOfflineShell(cache) {
+  const response = await fetch(OFFLINE_ROUTE, { cache: "reload" });
+  if (!response.ok) throw new Error("Offline shell could not be cached.");
+  const html = await response.clone().text();
+  await cache.put(OFFLINE_ROUTE, response);
+
+  const assets = new Set();
+  for (const match of html.matchAll(/(?:src|href)=["']([^"']*\/_next\/static\/[^"']+)["']/g)) {
+    const asset = new URL(match[1], self.location.origin);
+    if (asset.origin === self.location.origin) assets.add(asset.href);
+  }
+  await Promise.all([...assets].map(async asset => {
+    try {
+      const assetResponse = await fetch(asset, { cache: "reload" });
+      if (assetResponse.ok) await cache.put(asset, assetResponse);
+    } catch { /* Offline page still works in its server-rendered language. */ }
+  }));
+}
 
 self.addEventListener("install", event => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE_NAME);
-    await cache.add(OFFLINE_ROUTE);
+    await cacheOfflineShell(cache);
     await self.skipWaiting();
   })());
 });

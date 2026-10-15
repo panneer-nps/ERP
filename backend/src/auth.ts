@@ -2,6 +2,7 @@ import { createHash, randomBytes, scrypt as scryptCallback, timingSafeEqual } fr
 import { promisify } from "node:util";
 import { NextFunction, Request, Response } from "express";
 import { pool } from "./db";
+import { decryptTotpSecret, verifyTotpOrRecovery } from "./totp";
 
 const scrypt = promisify(scryptCallback);
 const SESSION_TTL_HOURS = Number(process.env.SESSION_TTL_HOURS ?? 12);
@@ -32,39 +33,75 @@ export async function createPasswordHash(password: string): Promise<string> {
   return `${salt}:${hash.toString("hex")}`;
 }
 
-export async function login(email: string, password: string, ip: string | undefined, userAgent: string | undefined) {
+export async function login(email: string, password: string, ip: string | undefined, userAgent: string | undefined, challenge?: string, code?: string) {
   const result = await pool.query<{
-    id: string; company_id: string; password_hash: string; active: boolean;
+    id: string; company_id: string; password_hash: string; active: boolean; totp_enabled: boolean; totp_secret_ciphertext: string | null;
   }>(
-    `SELECT id, company_id, password_hash, active FROM users WHERE lower(email) = lower($1) LIMIT 1`,
+    `SELECT u.id,u.company_id,u.password_hash,u.active,t.enabled_at IS NOT NULL AS totp_enabled,t.secret_ciphertext AS totp_secret_ciphertext
+       FROM users u LEFT JOIN user_totp t ON t.company_id=u.company_id AND t.user_id=u.id
+      WHERE lower(u.email)=lower($1) LIMIT 1`,
     [email],
   );
   const user = result.rows[0];
   if (!user || !user.active || !(await verifyPassword(password, user.password_hash))) return null;
 
-  const token = randomBytes(32).toString("base64url");
+  if (user.totp_enabled && (!challenge || !code)) {
+    if (challenge || code) return null;
+    const challengeToken = randomBytes(32).toString("base64url");
+    await pool.query("DELETE FROM auth_login_challenges WHERE user_id=$1 AND (expires_at<=now() OR consumed_at IS NOT NULL)", [user.id]);
+    await pool.query(`INSERT INTO auth_login_challenges(company_id,user_id,token_hash,ip_address,user_agent,expires_at)
+      VALUES($1,$2,$3,$4,$5,now()+interval '5 minutes')`, [user.company_id,user.id,hashToken(challengeToken),ip ?? null,userAgent ?? null]);
+    return { mfaRequired: true as const, challenge: challengeToken };
+  }
+  if (challenge || code) {
+    if (!user.totp_enabled || !challenge || !code || !user.totp_secret_ciphertext) return null;
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN");
+      const pending = await client.query<{ id:string; attempts:number }>(`SELECT id,attempts FROM auth_login_challenges
+        WHERE token_hash=$1 AND company_id=$2 AND user_id=$3 AND consumed_at IS NULL AND expires_at>now() FOR UPDATE`,
+        [hashToken(challenge),user.company_id,user.id]);
+      if (!pending.rowCount || pending.rows[0].attempts >= 5) { await client.query("ROLLBACK"); return null; }
+      const factors = await client.query<{ recovery_code_hashes:string[]; secret_ciphertext:string; last_totp_counter:string|null }>("SELECT recovery_code_hashes,secret_ciphertext,last_totp_counter FROM user_totp WHERE company_id=$1 AND user_id=$2 AND enabled_at IS NOT NULL FOR UPDATE", [user.company_id,user.id]);
+      if (!factors.rowCount) { await client.query("ROLLBACK"); return null; }
+      const verified = verifyTotpOrRecovery(decryptTotpSecret(factors.rows[0].secret_ciphertext),factors.rows[0].recovery_code_hashes,code);
+      const replayed = verified.totpCounter !== undefined && factors.rows[0].last_totp_counter !== null && verified.totpCounter <= Number(factors.rows[0].last_totp_counter);
+      if (!verified.valid || replayed) {
+        const attempts = pending.rows[0].attempts + 1;
+        await client.query("UPDATE auth_login_challenges SET attempts=$2::smallint,consumed_at=CASE WHEN $2::smallint>=5 THEN now() ELSE consumed_at END WHERE id=$1", [pending.rows[0].id,attempts]);
+        await client.query("COMMIT");
+        return null;
+      }
+      if (verified.recoveryHashes) await client.query("UPDATE user_totp SET recovery_code_hashes=$3,updated_at=now() WHERE company_id=$1 AND user_id=$2", [user.company_id,user.id,verified.recoveryHashes]);
+      if (verified.totpCounter !== undefined) await client.query("UPDATE user_totp SET last_totp_counter=$3,updated_at=now() WHERE company_id=$1 AND user_id=$2", [user.company_id,user.id,verified.totpCounter]);
+      await client.query("UPDATE auth_login_challenges SET consumed_at=now() WHERE id=$1", [pending.rows[0].id]);
+      return await createSession(client,user.id,user.company_id,ip,userAgent);
+    } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+    finally { client.release(); }
+  }
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
-    const session = await client.query<{ id: string }>(
+    return await createSession(client,user.id,user.company_id,ip,userAgent);
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client.release(); }
+}
+
+async function createSession(client: import("pg").PoolClient, userId: string, companyId: string, ip: string | undefined, userAgent: string | undefined) {
+  const token = randomBytes(32).toString("base64url");
+  const session = await client.query<{ id: string }>(
       `INSERT INTO sessions (user_id, company_id, token_hash, expires_at, ip_address, user_agent)
        VALUES ($1, $2, $3, now() + ($4 * interval '1 hour'), $5, $6) RETURNING id`,
-      [user.id, user.company_id, hashToken(token), SESSION_TTL_HOURS, ip ?? null, userAgent ?? null],
+      [userId, companyId, hashToken(token), SESSION_TTL_HOURS, ip ?? null, userAgent ?? null],
     );
-    await client.query("UPDATE users SET last_login_at = now() WHERE id = $1", [user.id]);
+    await client.query("UPDATE users SET last_login_at = now() WHERE id = $1", [userId]);
     await client.query(
       `INSERT INTO audit_logs (company_id, actor_user_id, action, entity_type, entity_id, ip_address)
        VALUES ($1, $2, 'auth.login', 'user', ($2::uuid)::text, $3)`,
-      [user.company_id, user.id, ip ?? null],
+      [companyId, userId, ip ?? null],
     );
     await client.query("COMMIT");
-    return { token, userId: user.id, companyId: user.company_id, sessionId: session.rows[0].id };
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
+    return { token, userId, companyId, sessionId: session.rows[0].id };
 }
 
 export async function requireAuth(req: Request, res: Response, next: NextFunction) {

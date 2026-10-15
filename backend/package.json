@@ -7,9 +7,14 @@
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "bootstrap-owner": "tsx src/bootstrap-owner.ts",
+    "owner:password-reset": "tsx src/recover-owner-password.ts",
     "migrate": "tsx src/migrate.ts",
+    "status": "tsx scripts/db-status.ts",
     "backup": "tsx scripts/backup-database.ts create",
-    "backup:restore-check": "tsx scripts/backup-database.ts restore-check"
+    "backup:restore-check": "tsx scripts/backup-database.ts restore-check",
+    "verify:totp": "tsx scripts/verify-totp-auth.ts",
+    "verify:owner-recovery": "tsx scripts/verify-owner-password-recovery.ts",
+    "verify:loading-role": "tsx scripts/verify-loading-verifier-role.ts"
   },
   "dependencies": {
     "cors": "^2.8.5",

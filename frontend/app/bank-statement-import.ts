@@ -3,10 +3,10 @@ export type ImportedBankLine = { date: string; description: string; reference: s
 const aliases = {
   date: ["date", "transactiondate", "trandate", "valuedate", "postingdate", "txndate", "transactiondt", "valuedt", "valdt", "txndt"],
   description: ["description", "narration", "narrative", "particulars", "transactiondetails", "details", "remarks", "transactionnarration"],
-  reference: ["reference", "ref", "refno", "referenceno", "chequerefno", "chqno", "chequeno", "chequenumber", "instrumentno", "utr", "utrno", "transactionid", "txnid", "documentnumber"],
+  reference: ["reference", "ref", "refno", "referenceno", "chequerefno", "chqrefno", "chqno", "chequeno", "chequenumber", "instrumentno", "instrno", "utr", "utrno", "transactionid", "txnid", "documentnumber"],
   amount: ["amount", "amountinr", "transactionamount", "transactionamountinr", "txnamount", "signedamount"],
-  debit: ["debit", "debitdr", "debitamt", "debitamount", "withdrawal", "withdrawals", "withdrawaldr", "withdraw", "withdrawalamnt", "withdrawalamount", "withdrawalamountinr"],
-  credit: ["credit", "creditcr", "creditamt", "creditamount", "deposit", "deposits", "depositcr", "depositamount", "depositamnt", "depositamountinr"],
+  debit: ["debit", "debitdr", "debitamt", "debitamount", "withdrawal", "withdrawals", "withdrawaldr", "withdraw", "withdrawalamnt", "withdrawalamt", "withdrawalamount", "withdrawalamountinr"],
+  credit: ["credit", "creditcr", "creditamt", "creditamount", "deposit", "deposits", "depositcr", "depositamt", "depositamount", "depositamnt", "depositamountinr"],
 } as const;
 
 function normalizeHeader(value: string) {
@@ -25,7 +25,7 @@ function parseDate(raw: string) {
   if (match) return dateParts(Number(match[1]), Number(match[2]), Number(match[3]));
   match = /^(\d{4})[/.](\d{1,2})[/.](\d{1,2})$/.exec(value);
   if (match) return dateParts(Number(match[1]), Number(match[2]), Number(match[3]));
-  match = /^(\d{1,2})[/.](\d{1,2})[/.](\d{2}|\d{4})$/.exec(value);
+  match = /^(\d{1,2})[-/.](\d{1,2})[-/.](\d{2}|\d{4})$/.exec(value);
   if (match) {
     const year = Number(match[3].length === 2 ? `${Number(match[3]) < 70 ? "20" : "19"}${match[3]}` : match[3]);
     return dateParts(year, Number(match[2]), Number(match[1]));

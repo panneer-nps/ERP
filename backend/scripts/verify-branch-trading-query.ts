@@ -9,7 +9,9 @@ async function main(){
   const queryStart=source.indexOf("`WITH dimensions AS (",routeStart);
   const queryEnd=source.indexOf("`,[req.auth!.companyId,parsed.data.from??null,parsed.data.to??null])",queryStart);
   if(routeStart<0||queryStart<0||queryEnd<0)throw new Error("Could not locate the branch trading report query in server.ts.");
-  const sql=source.slice(queryStart+1,queryEnd);
+  // The query is inside a TypeScript template literal. Convert escaped quote
+  // sequences in the source text to the string the API actually executes.
+  const sql=source.slice(queryStart+1,queryEnd).replace(/\\"/g,'"');
   const company=await pool.query<{id:string}>("SELECT id FROM companies ORDER BY id LIMIT 1");
   if(!company.rowCount)throw new Error("No company is configured in the local database.");
   const result=await pool.query(sql,[company.rows[0].id,null,null]);

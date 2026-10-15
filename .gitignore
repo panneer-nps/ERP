@@ -1,6 +1,8 @@
 node_modules/
 .next/
+.next-*/
 .next-build-verify/
+.next-build-verify-*/
 dist/
 coverage/
 backups/
@@ -10,3 +12,7 @@ backups/
 *.log
 *.tsbuildinfo
 backend/src/generated/
+/.local/
+/frontend/.next-local/
+/frontend/.next-local-*/
+/tmp/

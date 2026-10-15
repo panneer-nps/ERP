@@ -1,6 +1,7 @@
 import "dotenv/config";
 import { pool } from "./db";
 import { createPasswordHash } from "./auth";
+import { ACCOUNTANT_PERMISSION_CODES, seedLoadingVerifierRole, seedOperationalStaffRoles } from "./role-presets";
 
 async function main() {
   const email = process.env.BOOTSTRAP_OWNER_EMAIL?.trim().toLowerCase();
@@ -30,10 +31,14 @@ async function main() {
     );
     const managerRole = await client.query<{ id: string }>("INSERT INTO roles(company_id,code,name,read_only,system_role) VALUES($1,'manager','Manager',false,true) RETURNING id", [companyId]);
     await client.query("INSERT INTO role_permissions(role_id,permission_id) SELECT $1,id FROM permissions WHERE module NOT IN ('users','company') AND manager_default=true ON CONFLICT DO NOTHING", [managerRole.rows[0].id]);
+    const accountantRole = await client.query<{ id: string }>("INSERT INTO roles(company_id,code,name,read_only,system_role) VALUES($1,'accountant','Accountant',false,true) RETURNING id", [companyId]);
+    await client.query("INSERT INTO role_permissions(role_id,permission_id) SELECT $1,id FROM permissions WHERE code=ANY($2::text[]) ON CONFLICT DO NOTHING", [accountantRole.rows[0].id, ACCOUNTANT_PERMISSION_CODES]);
     const cashierRole = await client.query<{ id: string }>("INSERT INTO roles(company_id,code,name,read_only,system_role) VALUES($1,'cashier','Cashier',false,true) RETURNING id", [companyId]);
     await client.query("INSERT INTO role_permissions(role_id,permission_id) SELECT $1,id FROM permissions WHERE code=ANY($2::text[]) ON CONFLICT DO NOTHING", [cashierRole.rows[0].id, ["masters.view", "sales.view", "sales.create", "sales.post", "stock.view", "cash.close.view", "cash.close.record"]]);
     const auditorRole = await client.query<{ id: string }>("INSERT INTO roles(company_id,code,name,read_only,system_role) VALUES($1,'auditor','Auditor',true,true) RETURNING id", [companyId]);
     await client.query("INSERT INTO role_permissions(role_id,permission_id) SELECT $1,id FROM permissions WHERE action='view' OR code='audit.view' ON CONFLICT DO NOTHING", [auditorRole.rows[0].id]);
+    await seedLoadingVerifierRole(client, companyId);
+    await seedOperationalStaffRoles(client, companyId);
     await client.query("INSERT INTO user_roles (company_id, user_id, role_id) VALUES ($1, $2, $3)", [companyId, user.rows[0].id, role.rows[0].id]);
     await client.query(
       `INSERT INTO role_permissions (role_id, permission_id)

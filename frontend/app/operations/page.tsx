@@ -5,8 +5,8 @@ import { CompanyBrand, MobileNavigation } from "../navigation";
 import { LanguageSwitcher, useLocale } from "../i18n";
 import { Icon, type IconName } from "../visuals";
 
-const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000";
-type ModuleKey = "production" | "stock" | "sales" | "loading" | "purchases" | "people" | "payroll" | "expenses" | "accounts";
+const API = "";
+type ModuleKey = "production" | "stock" | "sales" | "loading" | "purchases" | "people" | "payroll" | "expenses" | "accounts" | "returns";
 type ModuleLink = { key: ModuleKey; href: string; icon: IconName; permissions: string[] };
 type LowStockItem = { productId: string; productName: string; code: string; unit: string; minimumStock: string | number; onHandQuantity: string | number; shortage: string | number };
 
@@ -22,6 +22,7 @@ const copy = {
     payroll: "Payroll", payrollText: "Prepare, review, approve and pay salary runs.",
     expenses: "Expenses", expensesText: "Record business expenses and follow approval status.",
     accounts: "Accounts", accountsText: "Review the chart of accounts, journals and financial records.",
+    returns: "Customer stock returns", returnsText: "Receive returned bricks without creating an invoice credit. Record condition, cost and stock location.",
     open: "Open", noModules: "Your account has no operational modules assigned. Ask the Owner to review your role.", lowTitle: "Low-stock alert", lowHelp: "Products below their configured minimum in the selected branch scope.", lowEmpty: "No products are below their minimum stock level.", lowError: "Low-stock details could not be loaded.", minimum: "Minimum", onHand: "Available", viewStock: "Review products",
   },
   ta: {
@@ -35,6 +36,7 @@ const copy = {
     payroll: "சம்பளம்", payrollText: "சம்பளப் பட்டியலைத் தயாரித்து, பரிசீலித்து, ஒப்புதல் பெற்று, செலுத்தவும்.",
     expenses: "செலவுகள்", expensesText: "வணிகச் செலவுகளைப் பதிவு செய்து ஒப்புதல் நிலையைப் பாருங்கள்.",
     accounts: "கணக்குகள்", accountsText: "கணக்குப் பட்டியல், ஜர்னல் மற்றும் நிதிப் பதிவுகளைப் பாருங்கள்.",
+    returns: "வாடிக்கையாளர் சரக்கு திரும்பப் பெறல்", returnsText: "விலைப்பட்டியல் கடன் குறிப்பு இல்லாமல் திரும்பிய செங்கற்களைப் பெறுங்கள். நிலை, செலவு மற்றும் இருப்பிடத்தைப் பதிவு செய்யுங்கள்.",
     open: "திறக்கவும்", noModules: "உங்கள் கணக்கிற்கு செயல்பாட்டு அணுகல் ஒதுக்கப்படவில்லை. உரிமையாளரிடம் உங்கள் பங்கைச் சரிபார்க்கச் சொல்லவும்.", lowTitle: "குறைந்த சரக்கு எச்சரிக்கை", lowHelp: "தேர்ந்தெடுத்த கிளை வரம்பில் குறைந்தபட்ச அளவை விட குறைவான பொருட்கள்.", lowEmpty: "எந்தப் பொருளின் சரக்கும் குறைந்தபட்ச அளவை விடக் குறைவாக இல்லை.", lowError: "குறைந்த சரக்கு விவரங்களை ஏற்ற முடியவில்லை.", minimum: "குறைந்தபட்சம்", onHand: "கையிருப்பு", viewStock: "பொருட்களைப் பார்க்க",
   },
 } as const;
@@ -49,6 +51,7 @@ const moduleLinks: ModuleLink[] = [
   { key: "payroll", href: "/payroll", icon: "cash", permissions: ["payroll.view", "payroll.run.create"] },
   { key: "expenses", href: "/expenses", icon: "calculator", permissions: ["expenses.view", "expenses.create"] },
   { key: "accounts", href: "/accounting/accounts", icon: "chart", permissions: ["accounting.view"] },
+  { key: "returns", href: "/stock-returns", icon: "receipt", permissions: ["stock.return.create"] },
 ];
 
 export default function OperationsPage() {

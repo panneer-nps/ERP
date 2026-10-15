@@ -1,14 +1,22 @@
 # API setup
 
-For Docker-based local development, run `npm run db:start` from the repository root; its database is bound to localhost only. For the native PostgreSQL 18 service on this machine, run this in PowerShell from the repository root. The script creates the app role/database when missing; if the database already exists, it resets the app password only when the database is already owned by that role:
+For Docker-based local development, run `npm.cmd run db:start` from the repository root; its database is bound to localhost only. Docker is optional when using an installed local PostgreSQL service. For the native PostgreSQL 18 service on this machine, run this in PowerShell from the repository root. The script creates the app role/database when missing; if the database already exists, it resets the app password only when the database is already owned by that role:
 
 ```powershell
 & 'C:\Program Files\PostgreSQL\18\bin\psql.exe' -W -h 127.0.0.1 -U postgres -d postgres -f 'backend/setup-database.psql'
 ```
 
-Enter the PostgreSQL administrator password at the prompt, then enter and confirm a new password for the dedicated `brick_erp_app` role. Run `./backend/set-local-db-password.ps1` to enter that app password securely and update the ignored `backend/.env` file without printing it. Apply versioned migrations with `npm run db:migrate`, and start the API with `npm run dev:api`. Start the frontend separately with `npm run dev:web`. Never expose PostgreSQL to browser/mobile clients or reuse these local settings in production.
+Enter the PostgreSQL administrator password at the prompt, then enter and confirm a new password for the dedicated `brick_erp_app` role. These prompts intentionally do not display typed characters; type the password and press Enter. Then run this command from the repository root to enter that app password securely and update the ignored `backend/.env` file without printing it:
 
-The initial migration creates identity, company/branch, action permission, session, and audit foundations. First-time setup is available at `/setup` only while the database has no company; it creates the initial owner and closes after that. The one-time `npm run bootstrap-owner --workspace @brick-erp/api` command remains available as an administrative alternative.
+```powershell
+pwsh -NoProfile -ExecutionPolicy Bypass -File .\backend\set-local-db-password.ps1
+```
+
+The execution-policy bypass applies only to this PowerShell process; it does not change the machine-wide policy. Apply versioned migrations with `npm.cmd run db:migrate`, then start the API and frontend in separate PowerShell terminals from the repository root with `npm.cmd run dev:api` and `npm.cmd run dev:web`. Using `npm.cmd` avoids the `npm.ps1` execution-policy block. Never expose PostgreSQL to browser/mobile clients or reuse these local settings in production.
+
+First-time setup is available at `/setup` only while the database has no company; it creates the initial Owner and closes after that. The Owner creates staff accounts in `/admin/users`, chooses a least-privilege role preset (Manager, Cashier, Accountant, Auditor, Sales Staff, Production Staff, Loading Staff, Loading Verifier or Store Staff), assigns branch access and sets each initial password. Staff use the same sign-in page as the Owner. The Owner maintains company name/logo in `/admin/company`. The one-time `npm.cmd run bootstrap-owner --workspace @brick-erp/api` command remains available as an administrative alternative.
+
+Users can change their own password from `/account/security`; the current password is required, passwords must be at least 12 characters, other active sessions are revoked, and the change is audited. If the only Owner is locked out, `npm.cmd run owner:password-reset --workspace @brick-erp/api -- --email owner@example.com --confirm` generates a one-time temporary password. This recovery command is restricted to a local, non-production PostgreSQL database, refuses inactive or ambiguous Owner accounts and refuses accounts with TOTP enabled. Copy the temporary password from the command output, sign in, then immediately change it in Account security. Treat the output as a secret and do not paste it into chat, screenshots, or logs.
 
 The API exposes `GET /api/health` and session-based `POST /api/auth/login`, `POST /api/auth/logout`, and `GET /api/auth/me`. Protected domain routes should use `requirePermission` with a specific action permission.
 
@@ -16,7 +24,7 @@ Loading evidence photos use private S3-compatible object storage when `OBJECT_ST
 
 ## Encrypted database backups and restore verification
 
-Set `BACKUP_ENCRYPTION_KEY` to a base64-encoded 32-byte random key and store/escrow that key in a secrets manager separate from both the application host and backup bucket. Losing the key makes the encrypted backups unrecoverable. Set `BACKUP_DIR` to a private staging directory with enough free space and `BACKUP_RETENTION_DAYS` to the business-approved local retention period (default 30 days). `pg_dump` and `pg_restore` must match or be newer than the PostgreSQL server; set `PG_DUMP_PATH` and `PG_RESTORE_PATH` if they are not on `PATH`.
+Set `BACKUP_ENCRYPTION_KEY` to a base64-encoded 32-byte random key and store/escrow that key in a secrets manager separate from both the application host and backup bucket. Losing the key makes the encrypted backups unrecoverable. Set `BACKUP_DIR` to a private staging directory with enough free space and `BACKUP_RETENTION_DAYS` to the business-approved local retention period (default 30 days). `pg_dump` and `pg_restore` must match or be newer than the PostgreSQL server. Tool lookup uses `PG_DUMP_PATH`/`PG_RESTORE_PATH` when explicitly set, then `PATH`, then the highest-version standard Windows installation under `C:\Program Files\PostgreSQL` or `C:\Program Files (x86)\PostgreSQL`; otherwise it falls back to the executable name. Use explicit paths if PostgreSQL is installed elsewhere or a particular version must be selected.
 
 Run `npm run db:backup` from the repository root. It uses a repeatable-read exported PostgreSQL snapshot, streams a custom-format dump, packages a table-count/schema-version manifest, encrypts the archive with AES-256-GCM, prunes only old ERP backup files in the configured local directory, and prints the encrypted file name and checksum. In production, private S3-compatible object storage must be configured; the encrypted archive is uploaded under `database-backups/` and read back to verify its checksum. Configure bucket versioning, access isolation and a lifecycle retention policy separately, matching the business-approved retention period. Schedule `npm run db:backup` with the deployment platform's scheduler; this repository does not create an OS scheduler or managed-database PITR/WAL policy.
 

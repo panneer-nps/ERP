@@ -1,9 +1,12 @@
 import "dotenv/config";
 import { createHash, randomBytes } from "node:crypto";
 import { pool } from "../src/db";
+import { assertDisposableVerificationTarget, assertLocalVerificationApi } from "./verification-target";
 
 const api=process.env.ERP_VERIFY_API_URL??"http://127.0.0.1:44001";
 async function main(){
+  assertDisposableVerificationTarget();
+  assertLocalVerificationApi(api);
   const owner=await pool.query<{id:string;company_id:string}>(`SELECT u.id,u.company_id FROM users u JOIN user_roles ur ON ur.company_id=u.company_id AND ur.user_id=u.id JOIN roles r ON r.company_id=ur.company_id AND r.id=ur.role_id WHERE r.code='owner' AND u.active=true ORDER BY u.created_at LIMIT 1`);
   if(!owner.rowCount)throw new Error("No active owner is available for the temporary read-only session.");
   const user=owner.rows[0],token=randomBytes(32).toString("base64url"),hash=createHash("sha256").update(token).digest("hex");

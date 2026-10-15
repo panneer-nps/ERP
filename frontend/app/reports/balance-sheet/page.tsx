@@ -2,19 +2,19 @@
 
 import { CompanyBrand } from "../../navigation";
 import { useEffect, useState } from "react";
-import { LanguageSwitcher, useLocale } from "../../i18n";
+import { localizedUiError, LanguageSwitcher, apiRequestError,useLocale } from "../../i18n";
 import { Icon } from "../../visuals";
 import { MobileNavigation } from "../../navigation";
 import { ReportPrintButton, ReportPrintMeta } from "../../report-export";
 
-const API=process.env.NEXT_PUBLIC_API_URL??"http://localhost:4000";
+const API="";
 type Row={code:string;name:string;balance:number};
 type Sheet={assets:Row[];liabilities:Row[];equity:Row[];currentEarnings:number;totalAssets:number;totalLiabilities:number;totalEquity:number;totalLiabilitiesAndEquity:number;balanced:boolean};
 const words={en:{title:"Balance sheet",intro:"See assets, liabilities and equity as of a selected date.",assets:"Assets",liabilities:"Liabilities",equity:"Equity",earnings:"Current earnings to date",totalAssets:"Total assets",totalLE:"Total liabilities and equity",asOf:"As of date",apply:"Update report",balanced:"The balance sheet balances.",unbalanced:"Assets do not match liabilities and equity.",empty:"No posted balances on this date.",loading:"Loading balance sheet…",error:"Could not load the report.",home:"Overview",reports:"Financial reports",account:"Account",amount:"Balance",note:"Current earnings are shown separately and included in equity."},ta:{title:"இருப்புநிலை",intro:"தேர்ந்தெடுத்த தேதியிலுள்ள சொத்துகள், பொறுப்புகள் மற்றும் மூலதனத்தைப் பாருங்கள்.",assets:"சொத்துகள்",liabilities:"பொறுப்புகள்",equity:"மூலதனம்",earnings:"இன்றுவரை நடப்பு லாபம்",totalAssets:"மொத்த சொத்துகள்",totalLE:"மொத்த பொறுப்புகள் மற்றும் மூலதனம்",asOf:"நிலவரத் தேதி",apply:"அறிக்கையைப் புதுப்பி",balanced:"இருப்புநிலை சமமாக உள்ளது.",unbalanced:"சொத்துகளும் பொறுப்புகளும் மூலதனமும் சமமில்லை.",empty:"இந்தத் தேதியில் பதிவான இருப்புகள் இல்லை.",loading:"இருப்புநிலை ஏற்றப்படுகிறது…",error:"அறிக்கையை ஏற்ற முடியவில்லை.",home:"கண்ணோட்டம்",reports:"நிதி அறிக்கைகள்",account:"கணக்கு",amount:"இருப்பு",note:"நடப்பு லாபம் தனியாகக் காட்டப்பட்டு மூலதனத்தில் சேர்க்கப்பட்டுள்ளது."}} as const;
 
 export default function BalanceSheetPage(){
  const{locale}=useLocale(),w=words[locale];const[date,setDate]=useState(""),[data,setData]=useState<Sheet|null>(null),[loading,setLoading]=useState(true),[error,setError]=useState("");
- async function load(asOf=date){setLoading(true);setError("");try{const token=sessionStorage.getItem("brick-erp-session");if(!token){window.location.replace("/");return}const q=asOf?`?to=${encodeURIComponent(asOf)}`:"",r=await fetch(`${API}/api/accounting/balance-sheet${q}`,{headers:{Authorization:`Bearer ${token}`},cache:"no-store"}),d=await r.json();if(r.status===401){window.location.replace("/");return}if(!r.ok)throw new Error(d.error?.message||w.error);setData(d)}catch(e){setError(e instanceof Error?e.message:w.error)}finally{setLoading(false)}}
+ async function load(asOf=date){setLoading(true);setError("");try{const token=sessionStorage.getItem("brick-erp-session");if(!token){window.location.replace("/");return}const q=asOf?`?to=${encodeURIComponent(asOf)}`:"",r=await fetch(`${API}/api/accounting/balance-sheet${q}`,{headers:{Authorization:`Bearer ${token}`},cache:"no-store"}),d=await r.json();if(r.status===401){window.location.replace("/");return}if(!r.ok)throw apiRequestError(d, w.error);setData(d)}catch(e){setError(localizedUiError(e, locale, w.error))}finally{setLoading(false)}}
  useEffect(()=>{void load("")},[]);
  const money=(n:number)=>new Intl.NumberFormat(locale==="ta"?"ta-IN":"en-IN",{style:"currency",currency:"INR",maximumFractionDigits:2}).format(n);
  const group=(title:string,rows:Row[],total?:number)=><section className="master-table-wrap" key={title}><h2 className="ledger-title">{title}</h2>{rows.length?<table className="master-table"><thead><tr><th>{w.account}</th><th>{w.amount}</th></tr></thead><tbody>{rows.map(r=><tr key={r.code}><td><b>{r.code}</b><small className="table-subtitle">{r.name}</small></td><td>{money(r.balance)}</td></tr>)}</tbody>{total!==undefined&&<tfoot><tr><th>{title}</th><th>{money(total)}</th></tr></tfoot>}</table>:<div className="master-empty">{w.empty}</div>}</section>;

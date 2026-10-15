@@ -3,11 +3,11 @@
 import { useEffect,useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { LanguageSwitcher,useLocale } from "../../../i18n";
+import { apiRequestError, LanguageSwitcher,useLocale } from "../../../i18n";
 import { Icon } from "../../../visuals";
 import { MobileNavigation } from "../../../navigation";
 
-const API=process.env.NEXT_PUBLIC_API_URL??"http://localhost:4000";
+const API="";
 type Detail={order:{id:string;orderNumber:string;orderDate:string;status:string;subtotal:number;taxTotal:number;total:number;customerId:string;customerName:string;customerCode:string;brokerId:string|null;brokerName:string|null;createdBy:string;createdAt:string};lines:Array<{id:string;lineNumber:number;productCode:string;productName:string;quality:string;baseQuantity:number;baseUnit:string;enteredQuantity:number;enteredUnitCode:string;enteredUnitLabel:string;conversionToBase:number;unitRate:number;taxRate:number;subtotal:number;tax:number;total:number}>;invoices:Array<{id:string;invoiceNumber:string;invoiceDate:string;status:string;subtotal:number;taxTotal:number;total:number;amountPaid:number;returnedAmount:number;outstanding:number}>};
 const copy={en:{title:"Sales order details",back:"Back to sales",loading:"Loading order…",missing:"Order not found or you do not have access to it.",retry:"Try again",customer:"Customer",broker:"Broker",date:"Order date",createdBy:"Created by",status:"Status",open:"Open",invoiced:"Invoiced",cancelled:"Cancelled",items:"Order items",product:"Product",quality:"Quality",good:"Good",second:"Second quality",entered:"Entered quantity",base:"Inventory quantity",unitRate:"Rate",tax:"Tax",subtotal:"Subtotal",total:"Total",invoice:"Invoice",invoiceDate:"Invoice date",invoiceStatus:"Invoice status",posted:"Posted",reversed:"Reversed",paid:"Collected",returned:"Returned",due:"Outstanding",noInvoice:"No invoice has been issued for this order.",error:"Could not load this order."},ta:{title:"விற்பனை ஆர்டர் விவரங்கள்",back:"விற்பனைக்குத் திரும்பு",loading:"ஆர்டர் ஏற்றப்படுகிறது…",missing:"ஆர்டரைக் கண்டறிய முடியவில்லை அல்லது இதைப் பார்க்க அனுமதி இல்லை.",retry:"மீண்டும் முயற்சி",customer:"வாடிக்கையாளர்",broker:"தரகர்",date:"ஆர்டர் தேதி",createdBy:"உருவாக்கியவர்",status:"நிலை",open:"திறந்தது",invoiced:"விலைப்பட்டியல் உருவாக்கப்பட்டது",cancelled:"ரத்து செய்யப்பட்டது",items:"ஆர்டர் பொருட்கள்",product:"பொருள்",quality:"தரம்",good:"நல்லது",second:"இரண்டாம் தரம்",entered:"உள்ளிட்ட அளவு",base:"சரக்கு அளவு",unitRate:"விலை",tax:"வரி",subtotal:"வரி முன் தொகை",total:"மொத்தம்",invoice:"விலைப்பட்டியல்",invoiceDate:"விலைப்பட்டியல் தேதி",invoiceStatus:"விலைப்பட்டியல் நிலை",posted:"பதிவானது",reversed:"திருப்பப்பட்டது",paid:"வசூலித்தது",returned:"திரும்பியது",due:"நிலுவை",noInvoice:"இந்த ஆர்டருக்கு இன்னும் விலைப்பட்டியல் உருவாக்கப்படவில்லை.",error:"இந்த ஆர்டரை ஏற்ற முடியவில்லை."}};
 
@@ -24,7 +24,7 @@ export default function SalesOrderDetailsPage(){
    const response=await fetch(`${API}/api/sales/orders/${id}`,{headers:{Authorization:`Bearer ${sessionStorage.getItem("brick-erp-session")??""}`},cache:"no-store",signal});
    const body=await response.json().catch(()=>({}));
    if(response.status===401){window.location.replace("/");return;}
-   if(!response.ok)throw new Error(response.status===404?w.missing:body.error?.message||w.error);
+   if(!response.ok){if(response.status===404)throw new Error(w.missing);throw apiRequestError(body,w.error)};
    setDetail(body as Detail);
   }catch(e){if(e instanceof Error&&e.name!=="AbortError")setError(e.message||w.error)}finally{setLoading(false)}
  }

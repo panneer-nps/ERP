@@ -1,5 +1,27 @@
-import { createHash } from "node:crypto";
+import { createHash, scrypt as scryptCallback } from "node:crypto";
+import { promisify } from "node:util";
 import type { PoolClient } from "pg";
+
+const scrypt = promisify(scryptCallback);
+
+async function protectPasswordFields(value: unknown): Promise<unknown> {
+  if (Array.isArray(value)) return Promise.all(value.map(protectPasswordFields));
+  if (!value || typeof value !== "object") return value;
+  const entries = await Promise.all(Object.entries(value).map(async ([key, item]) => {
+    if (/password|passwd|passphrase/i.test(key) && typeof item === "string") {
+      const fingerprint = await scrypt(item, "brick-erp-idempotency-password-v1", 32) as Buffer;
+      return [key, `scrypt:${fingerprint.toString("hex")}`] as const;
+    }
+    return [key, await protectPasswordFields(item)] as const;
+  }));
+  return Object.fromEntries(entries);
+}
+
+/** Hash request bodies without leaving a fast, offline password verifier in the idempotency ledger. */
+export async function hashIdempotencyRequest(operation: string, body: unknown): Promise<string> {
+  const protectedBody = await protectPasswordFields(body);
+  return createHash("sha256").update(JSON.stringify({ operation, body: protectedBody })).digest("hex");
+}
 
 export type IdempotencyResult =
   | { replay: false }
@@ -16,9 +38,7 @@ export async function claimIdempotencyKey(
       errorCode: "IDEMPOTENCY_KEY_REQUIRED",
     });
   }
-  const requestHash = createHash("sha256")
-    .update(JSON.stringify({ operation: args.operation, body: args.body }))
-    .digest("hex");
+  const requestHash = await hashIdempotencyRequest(args.operation, args.body);
   const inserted = await client.query(
     `INSERT INTO transaction_idempotency_keys(company_id,user_id,operation,request_key,request_hash)
      VALUES($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING request_key`,

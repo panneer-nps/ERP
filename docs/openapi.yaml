@@ -1,0 +1,692 @@
+openapi: 3.1.0
+info:
+  title: Brick Chamber ERP Core Administration API
+  version: 1.0.0
+  description: >-
+    Machine-readable contract for the live setup, authentication, user/role/branch
+    administration, and company profile routes. This is intentionally a scoped
+    contract; operational domain route families are summarized in API_SPEC.md and
+    are not claimed to be fully described here.
+servers:
+  - url: http://localhost:4000
+    description: Local development default; configure the client base URL per environment.
+tags:
+  - name: Setup
+  - name: Authentication
+  - name: Company profile
+  - name: User access
+  - name: Roles and branches
+paths:
+  /api/health:
+    get:
+      tags: [Setup]
+      operationId: getHealth
+      summary: Check API and database readiness
+      security: []
+      responses:
+        '200':
+          description: API and database health result.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, const: ok }
+                  database: { type: string, const: ok }
+                required: [status, database]
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/auth/setup-status:
+    get:
+      tags: [Setup]
+      operationId: getSetupStatus
+      summary: Check whether first-owner setup is available
+      security: []
+      responses:
+        '200':
+          description: Public setup state.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  setupRequired: { type: boolean }
+                required: [setupRequired]
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/auth/setup:
+    post:
+      tags: [Setup]
+      operationId: createInitialOwner
+      summary: Create the first company and Owner account
+      description: Available only before a company exists. Public signup closes after successful setup. Reuse the same Idempotency-Key and body when retrying after a lost response; a changed body with the same key is rejected.
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/OwnerSetupRequest' }
+      responses:
+        '201':
+          description: Company and Owner created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { message: { type: string } }
+                required: [message]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /api/auth/login:
+    post:
+      tags: [Authentication]
+      operationId: login
+      summary: Sign in using an email address and password
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/LoginRequest' }
+      responses:
+        '200':
+          description: Authenticated session. The token is opaque and should be held by the client as a secret.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  user:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      companyId: { type: string, format: uuid }
+                    required: [id, companyId]
+                required: [token, user]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+  /api/auth/me:
+    get:
+      tags: [Authentication]
+      operationId: getCurrentUser
+      summary: Get current user, company and assigned access
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Authenticated user profile and effective permissions.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user: { $ref: '#/components/schemas/CurrentUser' }
+                required: [user]
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+  /api/auth/logout:
+    post:
+      tags: [Authentication]
+      operationId: logout
+      summary: Revoke the current session
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Session revoked. }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+  /api/auth/password/change:
+    post:
+      tags: [Authentication]
+      operationId: changeOwnPassword
+      summary: Change the current user's password
+      description: Requires the current password, revokes other active sessions and preserves the current session. Limited to five attempts per 15 minutes.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PasswordChangeRequest' }
+      responses:
+        '200':
+          description: Password changed; other sessions were revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  otherSessionsRevoked: { type: integer, minimum: 0 }
+                required: [success, otherSessionsRevoked]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+  /api/admin/users:
+    get:
+      tags: [User access]
+      operationId: listUsers
+      summary: List company staff accounts
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Company-scoped user list with roles and branch assignments.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: '#/components/schemas/StaffUser' }
+                required: [users]
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+  /api/admin/users/{id}/active:
+    patch:
+      tags: [User access]
+      operationId: setUserActive
+      summary: Activate or deactivate a staff account
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { active: { type: boolean } }
+              required: [active]
+      responses:
+        '200':
+          description: Account status updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, const: true }
+                  active: { type: boolean }
+                required: [success, active]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+  /api/admin/access/roles:
+    get:
+      tags: [Roles and branches]
+      operationId: listRolesAndPermissions
+      summary: List roles and assignable permission codes
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Company roles and permission catalog.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  roles:
+                    type: array
+                    items: { $ref: '#/components/schemas/Role' }
+                  permissions:
+                    type: array
+                    items: { $ref: '#/components/schemas/Permission' }
+                required: [roles, permissions]
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+  /api/admin/access/roles/{id}:
+    patch:
+      tags: [Roles and branches]
+      operationId: updateCustomRole
+      summary: Update a custom role name and/or permission set
+      description: Built-in and read-only roles are protected from editing. Changes are audited.
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              properties:
+                name: { type: string, minLength: 2, maxLength: 80 }
+                permissionCodes: { type: array, maxItems: 200, items: { type: string } }
+      responses:
+        '200':
+          description: Custom role updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { success: { type: boolean, const: true } }
+                required: [success]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+  /api/admin/access/users:
+    post:
+      tags: [User access]
+      operationId: createStaffUser
+      summary: Create a staff account with roles and branch access
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateStaffRequest' }
+      responses:
+        '201':
+          description: Staff account created.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  roles: { type: array, items: { type: string } }
+                required: [id, roles]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+  /api/admin/access/users/{id}/roles:
+    put:
+      tags: [User access]
+      operationId: updateUserRoles
+      summary: Replace a staff account's role assignments
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                roleIds: { type: array, minItems: 1, maxItems: 10, items: { type: string, format: uuid } }
+              required: [roleIds]
+      responses:
+        '200':
+          description: Role assignments replaced; existing user sessions are revoked.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, const: true }
+                  roles: { type: array, items: { type: string } }
+                required: [success, roles]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+  /api/admin/access/users/{id}/password:
+    post:
+      tags: [User access]
+      operationId: resetStaffPassword
+      summary: Set a new staff password and revoke that user's sessions
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { password: { type: string, minLength: 12, maxLength: 128, format: password } }
+              required: [password]
+      responses:
+        '200':
+          description: Password updated.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { success: { type: boolean, const: true } }
+                required: [success]
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+  /api/admin/access/users/{id}/branches:
+    put:
+      tags: [User access]
+      operationId: setUserBranches
+      summary: Replace a staff account's branch assignments
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UuidPath'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                branchIds: { type: array, maxItems: 100, items: { type: string, format: uuid } }
+              required: [branchIds]
+      responses:
+        '200':
+          description: Branch assignments replaced.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, const: true }
+                  branchIds: { type: array, items: { type: string, format: uuid } }
+                required: [success, branchIds]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+  /api/admin/access/branches:
+    get:
+      tags: [Roles and branches]
+      operationId: listBranches
+      summary: List company branches
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Branch list, including inactive branches.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  branches: { type: array, items: { $ref: '#/components/schemas/Branch' } }
+                required: [branches]
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+    post:
+      tags: [Roles and branches]
+      operationId: createBranch
+      summary: Create a branch and its stock location
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                code: { type: string, minLength: 2, maxLength: 24, pattern: '^[A-Za-z0-9_-]+$' }
+                name: { type: string, minLength: 2, maxLength: 100 }
+              required: [code, name]
+      responses:
+        '201':
+          description: Branch created.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Branch' }
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+        '409': { $ref: '#/components/responses/ConflictError' }
+  /api/company/profile:
+    get:
+      tags: [Company profile]
+      operationId: getCompanyProfile
+      summary: Read company invoice/report profile
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Company profile; Owner role required.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profile: { $ref: '#/components/schemas/CompanyProfile' }
+                required: [profile]
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+    put:
+      tags: [Company profile]
+      operationId: updateCompanyProfile
+      summary: Update company invoice/report profile
+      description: Owner-only. Changes are audited; timezone must be recognized by PostgreSQL.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompanyProfile' }
+      responses:
+        '200':
+          description: Profile saved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean, const: true }
+                  profile: { $ref: '#/components/schemas/CompanyProfile' }
+                required: [success, profile]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+  /api/company/profile/logo:
+    get:
+      tags: [Company profile]
+      operationId: getCompanyLogo
+      summary: Read the authenticated company logo
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Private logo bytes.
+          content:
+            image/png: { schema: { type: string, format: binary } }
+            image/jpeg: { schema: { type: string, format: binary } }
+            image/webp: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '404': { $ref: '#/components/responses/NotFoundError' }
+    put:
+      tags: [Company profile]
+      operationId: uploadCompanyLogo
+      summary: Upload a company logo
+      description: Owner-only. Accepts PNG, JPEG or WebP up to 1 MiB; file signatures are checked.
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: { data: { type: string, contentEncoding: base64, maxLength: 1400000 } }
+              required: [data]
+      responses:
+        '200':
+          description: Logo saved.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties: { success: { type: boolean, const: true } }
+                required: [success]
+        '400': { $ref: '#/components/responses/ValidationError' }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+    delete:
+      tags: [Company profile]
+      operationId: removeCompanyLogo
+      summary: Remove the company logo
+      description: Owner-only; removal is recorded in the audit log.
+      security: [{ bearerAuth: [] }]
+      responses:
+        '204': { description: Logo removed. }
+        '401': { $ref: '#/components/responses/UnauthorizedError' }
+        '403': { $ref: '#/components/responses/ForbiddenError' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque session token
+  parameters:
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Reuse the same key for the same request when retrying. Keys must be 16–128 characters.
+      schema: { type: string, minLength: 16, maxLength: 128, pattern: '^[A-Za-z0-9._:-]+$' }
+    UuidPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    OwnerSetupRequest:
+      type: object
+      properties:
+        companyName: { type: string, minLength: 2, maxLength: 160 }
+        ownerName: { type: string, minLength: 2, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, format: password, minLength: 12, maxLength: 128 }
+      required: [companyName, ownerName, email, password]
+    LoginRequest:
+      type: object
+      properties:
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, format: password, minLength: 1, maxLength: 1024 }
+      required: [email, password]
+    PasswordChangeRequest:
+      type: object
+      properties:
+        currentPassword: { type: string, format: password, minLength: 1, maxLength: 1024 }
+        newPassword: { type: string, format: password, minLength: 12, maxLength: 128 }
+      required: [currentPassword, newPassword]
+    CurrentUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        fullName: { type: string }
+        companyId: { type: string, format: uuid }
+        companyName: { type: string }
+        roles:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              name: { type: string }
+            required: [code, name]
+        permissions: { type: array, items: { type: string } }
+      required: [id, email, fullName, companyId, companyName, roles, permissions]
+    StaffUser:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        fullName: { type: string }
+        email: { type: string, format: email }
+        active: { type: boolean }
+        lastLoginAt: { type: [string, 'null'], format: date-time }
+        createdAt: { type: string, format: date-time }
+        roles:
+          type: array
+          items:
+            type: object
+            properties: { code: { type: string }, name: { type: string } }
+            required: [code, name]
+        branchIds: { type: array, items: { type: string, format: uuid } }
+      required: [id, fullName, email, active, createdAt, roles, branchIds]
+    CreateStaffRequest:
+      type: object
+      properties:
+        fullName: { type: string, minLength: 2, maxLength: 120 }
+        email: { type: string, format: email, maxLength: 320 }
+        password: { type: string, format: password, minLength: 12, maxLength: 128 }
+        roleIds: { type: array, minItems: 1, maxItems: 10, items: { type: string, format: uuid } }
+        branchIds: { type: array, maxItems: 100, items: { type: string, format: uuid }, default: [] }
+      required: [fullName, email, password, roleIds]
+    Role:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        readOnly: { type: boolean }
+        systemRole: { type: boolean }
+        userCount: { type: integer }
+        permissionCodes: { type: array, items: { type: string } }
+      required: [id, code, name, readOnly, systemRole, userCount, permissionCodes]
+    Permission:
+      type: object
+      properties:
+        code: { type: string }
+        module: { type: string }
+        action: { type: string }
+        description: { type: string }
+      required: [code, module, action, description]
+    Branch:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string }
+        name: { type: string }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+      required: [id, code, name]
+    CompanyProfile:
+      type: object
+      properties:
+        name: { type: string, minLength: 2, maxLength: 160 }
+        legalName: { type: string, maxLength: 160, default: '' }
+        addressLine1: { type: string, maxLength: 200, default: '' }
+        addressLine2: { type: string, maxLength: 200, default: '' }
+        city: { type: string, maxLength: 100, default: '' }
+        district: { type: string, maxLength: 100, default: '' }
+        state: { type: string, maxLength: 100, default: '' }
+        pincode: { type: string, pattern: '^(|[0-9]{6})$', default: '' }
+        phone: { type: string, maxLength: 24, default: '' }
+        gstin: { type: string, default: '' }
+        pan: { type: string, default: '' }
+        timezone: { type: string, minLength: 1, maxLength: 100, example: Asia/Kolkata }
+      required: [name, timezone]
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code: { type: string }
+            message: { type: string }
+            requestId: { type: string }
+          required: [code, message]
+      required: [error]
+  responses:
+    ValidationError:
+      description: Invalid request or business-rule validation failure.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    UnauthorizedError:
+      description: Missing, invalid or revoked session.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ForbiddenError:
+      description: Role or company-owner requirement not met.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ConflictError:
+      description: Request conflicts with current setup or account state.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFoundError:
+      description: Requested company-owned resource does not exist.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServiceUnavailable:
+      description: Database/API dependency is unavailable.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

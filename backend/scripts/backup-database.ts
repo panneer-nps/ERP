@@ -1,7 +1,7 @@
 import "dotenv/config";
 import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
-import { createReadStream, createWriteStream } from "node:fs";
+import { createReadStream, createWriteStream, existsSync, readdirSync } from "node:fs";
 import { appendFile, mkdir, open, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -15,6 +15,19 @@ const IV_LENGTH = 12;
 const TAG_LENGTH = 16;
 const HEADER_LENGTH = MAGIC.length + IV_LENGTH;
 const BACKUP_TABLES = ["companies", "branches", "users", "audit_logs", "schema_migrations", "expenses", "journal_entries"] as const;
+const OPERATIONAL_TABLES = [
+  "journal_entry_lines", "sales_orders", "sales_invoices", "sales_invoice_lines", "stock_movements",
+  "inventory_cost_layers", "purchase_orders", "purchase_order_lines", "purchase_bills", "supplier_payments",
+  "production_batches", "production_cost_lines", "production_batch_milestones", "loading_sessions",
+  "employee_advances", "attendance_records", "salary_runs", "salary_payments", "transaction_idempotency_keys",
+] as const;
+
+export type Manifest = {
+  tableCounts: Record<string, number>;
+  operationalTableCounts?: Record<string, number>;
+  latestMigration: string | null;
+  createdAt: string;
+};
 
 function encryptionKey(): Buffer {
   const encoded = process.env.BACKUP_ENCRYPTION_KEY ?? "";
@@ -57,8 +70,57 @@ function pgEnvironment(parts: ReturnType<typeof connectionParts>): NodeJS.Proces
   };
 }
 
+export function resolvePgExecutable(
+  name: string,
+  configuredPath: string | undefined,
+  platform: NodeJS.Platform,
+  pathValue: string | undefined,
+  installRoots: string[] = [],
+): string {
+  const configured = configuredPath?.trim();
+  if (configured) return configured;
+  const binary = platform === "win32" ? `${name}.exe` : name;
+  const separator = platform === "win32" ? ";" : ":";
+  for (const directory of (pathValue ?? "").split(separator).map(value => value.trim().replace(/^"|"$/g, "")).filter(Boolean)) {
+    const candidate = join(directory, binary);
+    if (existsSync(candidate)) return candidate;
+  }
+  if (platform === "win32") {
+    const installed: Array<{ version: number[]; executable: string }> = [];
+    for (const root of installRoots) {
+      let entries: ReturnType<typeof readdirSync>;
+      try { entries = readdirSync(root, { withFileTypes: true }); } catch { continue; }
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !/^\d+(?:\.\d+)*$/.test(entry.name)) continue;
+        const executable = join(root, entry.name, "bin", binary);
+        if (existsSync(executable)) installed.push({ version: entry.name.split(".").map(Number), executable });
+      }
+    }
+    installed.sort((left, right) => {
+      const length = Math.max(left.version.length, right.version.length);
+      for (let index = 0; index < length; index += 1) {
+        const difference = (right.version[index] ?? 0) - (left.version[index] ?? 0);
+        if (difference) return difference;
+      }
+      return 0;
+    });
+    if (installed[0]) return installed[0].executable;
+  }
+  return binary;
+}
+
 function executable(name: string, variable: string): string {
-  return process.env[variable] || (process.platform === "win32" ? `${name}.exe` : name);
+  const programFiles = process.env.ProgramW6432 || process.env.ProgramFiles || "C:\\Program Files";
+  const programFilesX86 = process.env["ProgramFiles(x86)"] || "C:\\Program Files (x86)";
+  return resolvePgExecutable(
+    name,
+    process.env[variable],
+    process.platform,
+    process.env.PATH,
+    process.platform === "win32"
+      ? [join(programFiles, "PostgreSQL"), join(programFilesX86, "PostgreSQL")]
+      : [],
+  );
 }
 
 async function startDump(filePath: string, parts: ReturnType<typeof connectionParts>, snapshot?: string): Promise<void> {
@@ -132,13 +194,52 @@ async function runPgRestore(backupPath: string, target: ReturnType<typeof connec
   });
 }
 
-async function counts(query: (sql: string) => Promise<{ rows: Array<{ count: string }> }>) {
+async function countsForTables<T extends readonly string[]>(query: (sql: string) => Promise<{ rows: Array<{ count: string }> }>, tables: T) {
   const result: Record<string, number> = {};
-  for (const table of BACKUP_TABLES) {
+  for (const table of tables) {
     const row = await query(`SELECT count(*)::text AS count FROM public."${table}"`);
     result[table] = Number(row.rows[0].count);
   }
   return result;
+}
+
+export async function allPublicTableCounts(query: (sql: string) => Promise<{ rows: Array<Record<string, unknown>> }>): Promise<Record<string, number>> {
+  const tables = await query(
+    "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name",
+  );
+  const names = tables.rows.map((row) => row.table_name).filter((name): name is string => typeof name === "string");
+  const result: Record<string, number> = {};
+  for (const table of names) {
+    // Identifiers cannot be passed as SQL parameters; quote embedded quotes defensively.
+    const identifier = table.replaceAll('"', '""');
+    const row = await query(`SELECT count(*)::text AS count FROM public."${identifier}"`);
+    const count = row.rows[0]?.count;
+    if (typeof count !== "string" || !/^\d+$/.test(count)) throw new Error(`Could not count public table ${table}.`);
+    result[table] = Number(count);
+  }
+  return result;
+}
+
+export function parseManifest(value: unknown): Manifest {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("Backup manifest has an unsupported shape.");
+  const manifest = value as Record<string, unknown>;
+  const validCounts = (counts: unknown) => Boolean(counts && typeof counts === "object" && !Array.isArray(counts)
+    && Object.values(counts as Record<string, unknown>).every((count) => Number.isSafeInteger(count) && Number(count) >= 0));
+  if (!validCounts(manifest.tableCounts) || typeof manifest.createdAt !== "string"
+    || !(typeof manifest.latestMigration === "string" || manifest.latestMigration === null)
+    || (manifest.operationalTableCounts !== undefined && !validCounts(manifest.operationalTableCounts))) {
+    throw new Error("Backup manifest has an unsupported shape.");
+  }
+  return manifest as Manifest;
+}
+
+export function matchesManifestCounts(actualCounts: Record<string, number>, expectedCounts: Record<string, number>): boolean {
+  const expectedNames = Object.keys(expectedCounts).sort();
+  const legacyCoreManifest = JSON.stringify(expectedNames) === JSON.stringify([...BACKUP_TABLES].sort());
+  const comparedNames = legacyCoreManifest ? [...BACKUP_TABLES] : expectedNames;
+  if (!legacyCoreManifest && JSON.stringify(Object.keys(actualCounts).sort()) !== JSON.stringify(expectedNames)) return false;
+  return comparedNames.every((table) => Number.isSafeInteger(expectedCounts[table])
+    && expectedCounts[table] >= 0 && actualCounts[table] === expectedCounts[table]);
 }
 
 async function latestMigration(query: (sql: string) => Promise<{ rows: Array<{ filename: string | null }> }>) {
@@ -146,7 +247,7 @@ async function latestMigration(query: (sql: string) => Promise<{ rows: Array<{ f
   return result.rows[0]?.filename ?? null;
 }
 
-async function packageDump(dumpPath: string, packagePath: string, manifest: { tableCounts: Record<string, number>; latestMigration: string | null; createdAt: string }): Promise<void> {
+async function packageDump(dumpPath: string, packagePath: string, manifest: Manifest): Promise<void> {
   const metadata = Buffer.from(JSON.stringify(manifest));
   if (metadata.length > 1024 * 1024) throw new Error("Backup manifest is unexpectedly large.");
   const header = Buffer.alloc(12);
@@ -156,7 +257,7 @@ async function packageDump(dumpPath: string, packagePath: string, manifest: { ta
   await pipeline(createReadStream(dumpPath), createWriteStream(packagePath, { flags: "a" }));
 }
 
-async function unpackageDump(packagePath: string, dumpPath: string): Promise<{ tableCounts: Record<string, number>; latestMigration: string | null; createdAt: string }> {
+async function unpackageDump(packagePath: string, dumpPath: string): Promise<Manifest> {
   const handle = await open(packagePath, "r");
   try {
     const header = Buffer.alloc(12);
@@ -169,16 +270,12 @@ async function unpackageDump(packagePath: string, dumpPath: string): Promise<{ t
     const metadata = Buffer.alloc(metadataLength);
     const result = await handle.read(metadata, 0, metadataLength, header.length);
     if (result.bytesRead !== metadataLength) throw new Error("Backup manifest is truncated.");
-    const manifest = JSON.parse(metadata.toString("utf8")) as { tableCounts?: unknown; latestMigration?: unknown; createdAt?: unknown };
-    if (!manifest.tableCounts || typeof manifest.tableCounts !== "object" || typeof manifest.createdAt !== "string"
-      || !(typeof manifest.latestMigration === "string" || manifest.latestMigration === null)) {
-      throw new Error("Backup manifest has an unsupported shape.");
-    }
+    const manifest = parseManifest(JSON.parse(metadata.toString("utf8")) as unknown);
     const info = await handle.stat();
     const dumpOffset = header.length + metadataLength;
     if (info.size <= dumpOffset) throw new Error("Backup database archive is missing.");
     await pipeline(createReadStream(packagePath, { start: dumpOffset }), createWriteStream(dumpPath, { flags: "wx", mode: 0o600 }));
-    return manifest as { tableCounts: Record<string, number>; latestMigration: string | null; createdAt: string };
+    return manifest as Manifest;
   } finally {
     await handle.close();
   }
@@ -211,10 +308,11 @@ async function createBackup(): Promise<void> {
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     transactionOpen = true;
     const snapshot = (await client.query<{ id: string }>("SELECT pg_export_snapshot() AS id")).rows[0].id;
-    const tableCounts = await counts(sql => client!.query<{ count: string }>(sql));
+    const tableCounts = await allPublicTableCounts(sql => client!.query(sql));
+    const operationalTableCounts = await countsForTables(sql => client!.query<{ count: string }>(sql), OPERATIONAL_TABLES);
     const migration = await latestMigration(sql => client!.query<{ filename: string | null }>(sql));
     await startDump(rawPath, connectionParts(databaseUrl), snapshot);
-    const manifest = { tableCounts, latestMigration: migration, createdAt: new Date().toISOString() };
+    const manifest: Manifest = { tableCounts, operationalTableCounts, latestMigration: migration, createdAt: new Date().toISOString() };
     await packageDump(rawPath, packagePath, manifest);
     await client.query("COMMIT");
     transactionOpen = false;
@@ -275,15 +373,17 @@ async function restoreCheck(backupPathArg: string | undefined): Promise<void> {
     const targetUrl = new URL(adminUrl);
     targetUrl.pathname = `/${targetName}`;
     targetPool = new Pool({ connectionString: targetUrl.toString() });
-    const actualCounts = await counts(sql => targetPool!.query<{ count: string }>(sql));
+    const actualCounts = await allPublicTableCounts(sql => targetPool!.query(sql));
+    const actualOperationalCounts = await countsForTables(sql => targetPool!.query<{ count: string }>(sql), OPERATIONAL_TABLES);
     const actualMigration = await latestMigration(sql => targetPool!.query<{ filename: string | null }>(sql));
     const invalidConstraints = await targetPool.query<{ count: string }>(
       "SELECT count(*)::text AS count FROM pg_constraint WHERE connamespace='public'::regnamespace AND NOT convalidated",
     );
-    const passed = JSON.stringify(actualCounts) === JSON.stringify(manifest.tableCounts)
+    const passed = matchesManifestCounts(actualCounts, manifest.tableCounts)
+      && (!manifest.operationalTableCounts || JSON.stringify(actualOperationalCounts) === JSON.stringify(manifest.operationalTableCounts))
       && actualMigration === manifest.latestMigration
       && Number(invalidConstraints.rows[0]?.count) === 0;
-    console.log(JSON.stringify({ status: passed ? "passed" : "failed", backupCreatedAt: manifest.createdAt, restoredDatabase: targetName, tableCounts: actualCounts, migration: actualMigration, unvalidatedConstraints: Number(invalidConstraints.rows[0]?.count) }));
+    console.log(JSON.stringify({ status: passed ? "passed" : "failed", backupCreatedAt: manifest.createdAt, restoredDatabase: targetName, tableCounts: actualCounts, operationalTableCounts: actualOperationalCounts, migration: actualMigration, unvalidatedConstraints: Number(invalidConstraints.rows[0]?.count) }));
     if (!passed) process.exitCode = 1;
   } finally {
     await targetPool?.end();
@@ -301,7 +401,9 @@ async function main() {
   else throw new Error("Usage: backup-database.ts [create | restore-check <backup-file>].");
 }
 
-main().catch((error: unknown) => {
-  console.error(error instanceof Error ? error.message : "Database backup operation failed.");
-  process.exitCode = 1;
-});
+if (require.main === module) {
+  main().catch((error: unknown) => {
+    console.error(error instanceof Error ? error.message : "Database backup operation failed.");
+    process.exitCode = 1;
+  });
+}
