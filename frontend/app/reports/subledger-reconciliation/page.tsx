@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceSidebar } from "../../navigation";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { CompanyBrand, MobileNavigation } from "../../navigation";
@@ -44,7 +45,7 @@ export default function SubledgerReconciliationPage() {
   const matched = data?.accounts.every(account => account.balanced) ?? false;
 
   return <main className="dashboard-shell">
-    <aside className="sidebar"><CompanyBrand href="/dashboard"/><div className="nav-label">{w.home.toUpperCase()}</div><a className="nav-item" href="/dashboard"><Icon name="home" size={17}/>{w.home}</a><a className="nav-item active" href="/reports"><Icon name="chart" size={17}/>{w.reports}</a></aside>
+    <WorkspaceSidebar/>
     <MobileNavigation active="reports"/><section className="dashboard-main"><header className="topbar"><div className="breadcrumb"><a href="/dashboard">{w.home}</a><span>/</span><a href="/reports">{w.reports}</a><span>/</span>{w.title}</div><div className="topbar-right"><LanguageSwitcher/></div></header>
       <div className="dashboard-content master-content"><div className="master-heading"><div><div className="eyebrow muted">BRICK CHAMBER ERP</div><h1>{w.title}</h1><p>{w.intro}</p></div><div className="report-actions"><ReportPrintButton label={locale === "ta" ? "அச்சிடு / PDF ஆகச் சேமி" : "Print / save PDF"}/></div></div>
         <ReportPrintMeta>{w.title} · {w.asOf}: {data?.asOf ?? asOf}</ReportPrintMeta>

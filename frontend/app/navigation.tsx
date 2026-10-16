@@ -9,6 +9,96 @@ type MobileNavKey="home"|"operations"|"approvals"|"reports"|"masters"|"productio
 type MenuItem={key:string;icon:IconName;href:string;section:"navigation"|"administration"|"myAccount";permission?:string;anyPermissions?:string[];ownerOnly?:boolean};
 const API="";
 
+type WorkspaceLink={href:string;icon:IconName;en:string;ta:string;permission?:string;anyPermissions?:string[];ownerOnly?:boolean};
+const workspaceLinks:WorkspaceLink[]=[
+ {href:"/dashboard",icon:"home",en:"Overview",ta:"கண்ணோட்டம்"},
+ {href:"/operations",icon:"boxes",en:"Operations",ta:"செயல்பாடுகள்"},
+ {href:"/masters",icon:"boxes",en:"Business masters",ta:"வணிக அடிப்படைத் தகவல்கள்",permission:"masters.view"},
+ {href:"/production",icon:"factory",en:"Production",ta:"உற்பத்தி",anyPermissions:["production.view","production.create"]},
+ {href:"/sales",icon:"receipt",en:"Sales",ta:"விற்பனை",anyPermissions:["sales.view","sales.create"]},
+ {href:"/brokers",icon:"users",en:"Broker commissions",ta:"தரகர் கமிஷன்",permission:"brokers.commission.view"},
+ {href:"/loading",icon:"truck",en:"Loading & delivery",ta:"ஏற்றுதல் மற்றும் விநியோகம்",permission:"loading.view"},
+ {href:"/purchases",icon:"shopping",en:"Purchases",ta:"கொள்முதல்",anyPermissions:["purchases.view","purchases.create"]},
+ {href:"/stock-returns",icon:"receipt",en:"Stock returns",ta:"சரக்கு திரும்பப் பெறல்",permission:"stock.return.create"},
+ {href:"/expenses",icon:"calculator",en:"Expenses",ta:"செலவுகள்",anyPermissions:["expenses.view","expenses.create"]},
+ {href:"/people",icon:"users",en:"People & attendance",ta:"பணியாளர்கள் மற்றும் வருகை",anyPermissions:["employees.view","attendance.view"]},
+ {href:"/people/ledger",icon:"calculator",en:"Employee ledger",ta:"பணியாளர் பேரேடு",permission:"employees.view"},
+ {href:"/payroll",icon:"cash",en:"Payroll",ta:"சம்பளம்",anyPermissions:["payroll.view","payroll.run.create"]},
+ {href:"/accounting/accounts",icon:"calculator",en:"Accounts",ta:"கணக்குகள்",permission:"accounting.view"},
+ {href:"/reports",icon:"chart",en:"Financial reports",ta:"நிதி அறிக்கைகள்",anyPermissions:["sales.view","stock.view","production.view","purchases.view","accounting.view","audit.view"]},
+ {href:"/approvals",icon:"check",en:"Approvals",ta:"ஒப்புதல்கள்",anyPermissions:["expenses.approve","stocktake.approve","cash.close.approve","loading.approve","brokers.commission.approve","sales.approve","employees.advance.approve","accounting.journal.approve","payroll.approve"]},
+ {href:"/notifications",icon:"bell",en:"Notifications",ta:"அறிவிப்புகள்"},
+];
+const masterLinks:WorkspaceLink[]=[
+ {href:"/masters",icon:"boxes",en:"Customers, suppliers & products",ta:"வாடிக்கையாளர்கள், வழங்குநர்கள் மற்றும் பொருட்கள்",permission:"masters.view"},
+ {href:"/masters/tax-codes",icon:"calculator",en:"HSN / tax codes",ta:"HSN / வரிக் குறியீடுகள்",permission:"masters.view"},
+ {href:"/masters/units",icon:"boxes",en:"Product units",ta:"பொருள் அலகுகள்",permission:"masters.view"},
+];
+const reportLinks:WorkspaceLink[]=[
+ {href:"/reports",icon:"chart",en:"Trial balance & profit / loss",ta:"சோதனை இருப்பு மற்றும் லாப நஷ்டம்",permission:"accounting.view"},
+ {href:"/reports/balance-sheet",icon:"chart",en:"Balance sheet",ta:"இருப்புநிலை",permission:"accounting.view"},
+ {href:"/reports/cash-bank-book",icon:"cash",en:"Cash / bank book",ta:"ரொக்கம் / வங்கிப் பதிவேடு",permission:"accounting.view"},
+ {href:"/reports/cash-closing",icon:"cash",en:"Cash closing",ta:"ரொக்கக் கணக்கு முடிப்பு",permission:"accounting.view"},
+ {href:"/reports/bank-reconciliation",icon:"chart",en:"Bank reconciliation",ta:"வங்கி ஒப்பீடு",permission:"bank.reconcile.view"},
+ {href:"/reports/customer-aging",icon:"calendar",en:"Customer overdue aging",ta:"வாடிக்கையாளர் காலதாமத நிலுவை",permission:"sales.view"},
+ {href:"/reports/sales",icon:"receipt",en:"Sales register",ta:"விற்பனைப் பதிவேடு",permission:"sales.view"},
+ {href:"/reports/purchases",icon:"shopping",en:"Purchase register",ta:"கொள்முதல் பதிவேடு",permission:"purchases.view"},
+ {href:"/reports/stock",icon:"boxes",en:"Stock report",ta:"சரக்கு அறிக்கை",permission:"stock.view"},
+ {href:"/reports/production",icon:"factory",en:"Production report",ta:"உற்பத்தி அறிக்கை",permission:"production.view"},
+ {href:"/reports/loading",icon:"truck",en:"Loading register",ta:"ஏற்றுதல் பதிவேடு",permission:"loading.view"},
+ {href:"/reports/expenses",icon:"calculator",en:"Expense report",ta:"செலவு அறிக்கை",permission:"expenses.view"},
+ {href:"/reports/labour",icon:"users",en:"Labour / department cost",ta:"தொழிலாளர் / துறைச் செலவு",permission:"payroll.view"},
+ {href:"/reports/brokers",icon:"users",en:"Broker commission",ta:"தரகர் கமிஷன்",permission:"sales.view"},
+ {href:"/reports/branches",icon:"chart",en:"Branch trading",ta:"கிளை வணிக ஒப்பீடு",ownerOnly:true},
+ {href:"/reports/subledger-reconciliation",icon:"shield",en:"Control account check",ta:"பேரேடு ஒப்பீடு",permission:"accounting.view"},
+ {href:"/reports/period-close",icon:"shield",en:"Month-end close",ta:"மாத இறுதிக் கணக்கு முடிப்பு",permission:"accounting.period.close.view"},
+ {href:"/reports/financial-years",icon:"calendar",en:"Financial years",ta:"நிதியாண்டுகள்",permission:"accounting.financial-years.view"},
+];
+const accountLinks:WorkspaceLink[]=[
+ {href:"/account/sessions",icon:"user",en:"My devices",ta:"என் சாதனங்கள்"},
+ {href:"/account/security",icon:"shield",en:"Account security",ta:"கணக்கு பாதுகாப்பு"},
+];
+const accountingLinks:WorkspaceLink[]=[
+ {href:"/accounting/accounts",icon:"calculator",en:"Chart of accounts",ta:"கணக்குப் பட்டியல்",permission:"accounting.view"},
+ {href:"/accounting/journals",icon:"receipt",en:"Manual journals",ta:"கைமுறைப் பதிவுகள்",permission:"accounting.view"},
+];
+const adminLinks:WorkspaceLink[]=[
+ {href:"/admin/company",icon:"building",en:"Company profile",ta:"நிறுவன விவரம்",ownerOnly:true},
+ {href:"/admin/payment-modes",icon:"cash",en:"Payment methods",ta:"பணம் செலுத்தும் முறைகள்",ownerOnly:true},
+ {href:"/admin/users",icon:"users",en:"User access",ta:"பயனர் அணுகல்",permission:"users.view"},
+ {href:"/admin/roles",icon:"shield",en:"Roles & permissions",ta:"பங்குகள் மற்றும் அனுமதிகள்",permission:"users.roles.manage"},
+ {href:"/admin/sequences",icon:"receipt",en:"Document numbers",ta:"ஆவண எண்கள்",ownerOnly:true},
+ {href:"/audit",icon:"shield",en:"Audit center",ta:"தணிக்கை மையம்",permission:"audit.view"},
+ {href:"/assistant",icon:"chart",en:"Owner assistant",ta:"உரிமையாளர் உதவியாளர்",ownerOnly:true},
+];
+
+export function WorkspaceSidebar({disabled=false}:{disabled?:boolean}){
+ const {locale}=useLocale(),pathname=usePathname()??"";
+ const sidebarRef=useRef<HTMLElement>(null);
+ const [access,setAccess]=useState<{owner:boolean;permissions:string[];fullName:string;roleName:string}|null>(null);
+ const [expanded,setExpanded]=useState<Record<string,boolean>>({operations:["/operations","/masters","/production","/sales","/brokers","/loading","/purchases","/stock-returns","/expenses","/people","/payroll","/accounting"].some(path=>pathname===path||pathname.startsWith(`${path}/`)),reports:pathname.startsWith("/reports"),admin:pathname.startsWith("/admin/")||pathname==="/audit"||pathname==="/assistant",account:pathname.startsWith("/account/")});
+ const toggle=(key:string,open:boolean)=>setExpanded(current=>current[key]===open?current:{...current,[key]:open});
+ useEffect(()=>{const token=sessionStorage.getItem("brick-erp-session");if(!token)return;let live=true;void fetch(`${API}/api/auth/me`,{headers:{Authorization:`Bearer ${token}`},cache:"no-store"}).then(async response=>response.ok?response.json():null).then(data=>{if(!live||!data?.user)return;const user=data.user as {fullName?:string;permissions?:string[];roles?:Array<{code:string;name:string}>};const owner=(user.roles??[]).some(role=>role.code==="owner");setAccess({owner,permissions:user.permissions??[],fullName:user.fullName??"",roleName:owner?(locale==="ta"?"உரிமையாளர்":"Owner"):(user.roles??[]).map(role=>role.name).join(", ")})}).catch(()=>undefined);return()=>{live=false}},[locale]);
+ useEffect(()=>{if(!access||window.matchMedia("(max-width: 680px)").matches)return;const active=sidebarRef.current?.querySelector<HTMLElement>('.workspace-subitem[aria-current="page"]')??sidebarRef.current?.querySelector<HTMLElement>('.nav-item[aria-current="page"]');active?.scrollIntoView({block:"nearest"})},[access,pathname]);
+ async function signOut(){const token=sessionStorage.getItem("brick-erp-session");if(token)await fetch(`${API}/api/auth/logout`,{method:"POST",headers:{Authorization:`Bearer ${token}`}}).catch(()=>undefined);sessionStorage.removeItem("brick-erp-session");for(let index=sessionStorage.length-1;index>=0;index--){const key=sessionStorage.key(index);if(key?.startsWith("brick-erp-offline-"))sessionStorage.removeItem(key)}window.location.replace("/")}
+ const allowed=(item:WorkspaceLink)=>!access?item.href==="/dashboard"||item.href.startsWith("/account/")||item.href==="/notifications":access.owner||item.ownerOnly===undefined&&(!item.permission||access.permissions.includes(item.permission))&&(!item.anyPermissions||item.anyPermissions.some(code=>access.permissions.includes(code)));
+ const label=(item:WorkspaceLink)=>locale==="ta"?item.ta:item.en;
+ const link=(item:WorkspaceLink,child=false)=>{const exact=pathname===item.href,active=exact||!child&&pathname.startsWith(`${item.href}/`);return <a key={item.href} href={item.href} className={`${child?"workspace-subitem":"nav-item"}${active?" active":""}`} aria-current={exact?"page":undefined}><Icon name={item.icon} size={child?15:17}/><span>{label(item)}</span></a>};
+ const operations=workspaceLinks.filter(item=>!["/dashboard","/reports","/approvals","/notifications"].includes(item.href)).filter(allowed);
+ const reports=workspaceLinks.find(item=>item.href==="/reports");
+ const reportMenu=reportLinks.filter(allowed);
+ const administration=adminLinks.filter(allowed);
+ const account=accountLinks.filter(allowed);
+ const navEntry=(item:WorkspaceLink)=><div key={item.href}>{link(item)}{item.href==="/masters"&&pathname.startsWith("/masters")&&<div className="workspace-subnav" aria-label={locale==="ta"?"வணிக அடிப்படைத் தகவல்கள்":"Business masters"}>{masterLinks.filter(allowed).map(sub=>link(sub,true))}</div>}{item.href==="/accounting/accounts"&&pathname.startsWith("/accounting")&&<div className="workspace-subnav">{accountingLinks.filter(allowed).map(sub=>link(sub,true))}</div>}</div>;
+ return <aside ref={sidebarRef} className="sidebar workspace-sidebar"><CompanyBrand href="/dashboard"/><nav inert={disabled} aria-label={locale==="ta"?"பணியிட வழிசெலுத்தல்":"Workspace navigation"}>
+  <div className="workspace-nav-section"><div className="nav-label">{locale==="ta"?"முகப்பு":"WORKSPACE"}</div>{link(workspaceLinks[0])}{workspaceLinks.filter(item=>["/approvals","/notifications"].includes(item.href)&&allowed(item)).map(linkItem=>link(linkItem))}</div>
+  {operations.length>0&&<details className="workspace-nav-section workspace-nav-details" open={expanded.operations} onToggle={event=>toggle("operations",event.currentTarget.open)}><summary>{locale==="ta"?"செயல்பாடுகள்":"Operations"}</summary><div className="workspace-nav-entries">{operations.map(navEntry)}</div></details>}
+  {reports&&allowed(reports)&&<details className="workspace-nav-section workspace-nav-details" open={expanded.reports} onToggle={event=>toggle("reports",event.currentTarget.open)}><summary>{locale==="ta"?"அறிக்கைகள்":"Reports"}</summary><div className="workspace-nav-entries">{link(reports)}{reportMenu.length>0&&<div className="workspace-subnav">{reportMenu.map(item=>link(item,true))}</div>}</div></details>}
+  {administration.length>0&&<details className="workspace-nav-section workspace-nav-details" open={expanded.admin} onToggle={event=>toggle("admin",event.currentTarget.open)}><summary>{locale==="ta"?"நிர்வாகம்":"Administration"}</summary><div className="workspace-nav-entries">{administration.map(linkItem=>link(linkItem))}</div></details>}
+  {account.length>0&&<details className="workspace-nav-section workspace-nav-details" open={expanded.account} onToggle={event=>toggle("account",event.currentTarget.open)}><summary>{locale==="ta"?"என் கணக்கு":"My account"}</summary><div className="workspace-nav-entries">{account.map(linkItem=>link(linkItem))}</div></details>}
+ </nav>{access&&<div className="sidebar-bottom"><div className="avatar">{access.fullName.slice(0,1).toUpperCase()}</div><div className="user-meta"><b>{access.fullName}</b><span>{access.roleName}</span></div><button className="signout" type="button" onClick={()=>void signOut()} aria-label={locale==="ta"?"வெளியேறு":"Sign out"}><Icon name="logout" size={17}/></button></div>}</aside>;
+}
+
 export function MobileNavigation({active,disabled=false}:{active:MobileNavKey|null;disabled?:boolean}){
  const {locale}=useLocale();
  const pathname=usePathname()??"";
@@ -74,6 +164,9 @@ export function MobileNavigation({active,disabled=false}:{active:MobileNavKey|nu
   {key:"account",icon:"user",href:"/account/sessions",section:"myAccount"},
  ],[permissions]);
  const visible=items.filter(item=>item.ownerOnly?owner:item.permission?granted.includes(item.permission):item.anyPermissions?item.anyPermissions.some(permission=>granted.includes(permission)):true);
+ const contextLinks=pathname.startsWith("/masters")?masterLinks:pathname.startsWith("/reports")?reportLinks:pathname.startsWith("/accounting")?accountingLinks:[];
+ const visibleContext=contextLinks.filter(item=>owner||!item.ownerOnly&&(!item.permission||granted.includes(item.permission))&&(!item.anyPermissions||item.anyPermissions.some(permission=>granted.includes(permission))));
+ const contextTitle=pathname.startsWith("/masters")?(locale==="ta"?"வணிக அடிப்படைத் தகவல்கள்":"Business masters"):pathname.startsWith("/reports")?(locale==="ta"?"அறிக்கைகள்":"Reports"):(locale==="ta"?"கணக்குகள்":"Accounts");
  const staffPriority=["sales","production","loading","purchases","accounting","payroll","reports","masters"];
  const staffPrimary:Array<[MobileNavKey,IconName,string]>=[["home","home","/dashboard"],...staffPriority.flatMap(key=>{const item=visible.find(candidate=>candidate.key===key);return item?[[key as MobileNavKey,item.icon,item.href] as [MobileNavKey,IconName,string]]:[]}).slice(0,3)];
  const primary:Array<[MobileNavKey,IconName,string]>=owner?[["home","home","/dashboard"],["operations","boxes","/operations"],["approvals","check","/approvals"],["reports","chart","/reports"]]:staffPrimary;
@@ -82,7 +175,7 @@ export function MobileNavigation({active,disabled=false}:{active:MobileNavKey|nu
  const moreActive=!primaryActive;
 
  return <>
-  {moreOpen&&!disabled&&<><button type="button" className="mobile-more-backdrop" aria-hidden="true" tabIndex={-1} onClick={()=>setMoreOpen(false)}/><section ref={moreMenuRef} id="mobile-more-menu" className="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title" tabIndex={-1}><div className="mobile-more-heading"><b id="mobile-more-title">{labels.more}</b><button type="button" onClick={()=>setMoreOpen(false)} aria-label={locale==="ta"?"மூடு":"Close"}>×</button></div>{(["navigation","administration","myAccount"] as const).map(section=>{const sectionItems=visible.filter(item=>item.section===section);return sectionItems.length?<div key={section} className="mobile-more-section"><div className="mobile-more-caption">{labels[section]}</div><div className="mobile-more-grid">{sectionItems.map(item=><a key={item.key} href={item.href} onClick={()=>setMoreOpen(false)}><Icon name={item.icon} size={18}/><span>{labels[item.key as keyof typeof labels]??item.key}</span></a>)}</div></div>:null})}</section></>}
+  {moreOpen&&!disabled&&<><button type="button" className="mobile-more-backdrop" aria-hidden="true" tabIndex={-1} onClick={()=>setMoreOpen(false)}/><section ref={moreMenuRef} id="mobile-more-menu" className="mobile-more-menu" role="dialog" aria-modal="true" aria-labelledby="mobile-more-title" tabIndex={-1}><div className="mobile-more-heading"><b id="mobile-more-title">{labels.more}</b><button type="button" onClick={()=>setMoreOpen(false)} aria-label={locale==="ta"?"மூடு":"Close"}>×</button></div>{visibleContext.length>0&&<div className="mobile-more-section"><div className="mobile-more-caption">{contextTitle}</div><div className="mobile-more-grid">{visibleContext.map(item=><a key={item.href} href={item.href} aria-current={pathname===item.href?"page":undefined} onClick={()=>setMoreOpen(false)}><Icon name={item.icon} size={18}/><span>{locale==="ta"?item.ta:item.en}</span></a>)}</div></div>}{(["navigation","administration","myAccount"] as const).map(section=>{const sectionItems=visible.filter(item=>item.section===section);return sectionItems.length?<div key={section} className="mobile-more-section"><div className="mobile-more-caption">{labels[section]}</div><div className="mobile-more-grid">{sectionItems.map(item=><a key={item.key} href={item.href} onClick={()=>setMoreOpen(false)}><Icon name={item.icon} size={18}/><span>{labels[item.key as keyof typeof labels]??item.key}</span></a>)}</div></div>:null})}</section></>}
   <nav className={`mobile-bottom-nav${disabled?" disabled":""}`} aria-label={locale==="ta"?"முதன்மை வழிசெலுத்தல்":"Main navigation"}>
    {primary.map(([key,icon,href])=>disabled?<span key={key} className={primaryActive?.[0]===key?"mobile-nav-item active":"mobile-nav-item"} aria-label={fullNavLabels[key]??labels[key]} aria-disabled="true"><Icon name={icon} size={19}/><span>{labels[key]}</span></span>:<a key={key} href={href} className={primaryActive?.[0]===key?"mobile-nav-item active":"mobile-nav-item"} aria-label={fullNavLabels[key]??labels[key]} aria-current={primaryActive?.[0]===key?"page":undefined}><Icon name={icon} size={19}/><span>{labels[key]}</span></a>)}
    <button ref={moreButtonRef} type="button" className={`mobile-nav-item${moreActive||moreOpen?" active":""}`} aria-expanded={moreOpen} aria-haspopup="dialog" aria-controls="mobile-more-menu" disabled={disabled} onClick={()=>setMoreOpen(value=>!value)}><Icon name="settings" size={19}/><span>{labels.more}</span></button>

@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceSidebar } from "../navigation";
 
 import { useEffect, useState } from "react";
 import { LanguageSwitcher, useLocale } from "../i18n";
@@ -71,14 +72,6 @@ export default function Dashboard() {
 
   function applyDashboardRange(){if(fromDate<=toDate)setAppliedRange({from:fromDate,to:toDate})}
 
-  async function signOut() {
-    const token = sessionStorage.getItem("brick-erp-session");
-    if (token) await fetch(`${API_URL}/api/auth/logout`, { method: "POST", headers: { Authorization: `Bearer ${token}` } }).catch(() => undefined);
-    sessionStorage.removeItem("brick-erp-session");
-    for(let index=sessionStorage.length-1;index>=0;index--){const key=sessionStorage.key(index);if(key?.startsWith("brick-erp-offline-"))sessionStorage.removeItem(key);}
-    window.location.replace("/");
-  }
-
   if (loading) return <main className="dashboard-loading">{t("loadingWorkspace")}</main>;
   if (!profile) return <main className="dashboard-loading"><div>{profileUnavailable?t("offlineProfileUnavailable"):t("loadingWorkspace")}<p><a href="/">{t("signInTitle")}</a></p></div></main>;
 
@@ -115,28 +108,7 @@ export default function Dashboard() {
 
   return (
     <main className={`dashboard-shell${offlineMode?" offline-mode":""}`}>
-      <aside className="sidebar">
-        <CompanyBrand href="/" />
-        <nav className="sidebar-navigation" inert={offlineMode}>
-        <div className="nav-label">{t("workspace").toUpperCase()}</div>
-        <a className="nav-item active" href="/dashboard"><Icon name="home" size={17}/>{t("overview")}</a>
-        <a className="nav-item" href="/notifications"><Icon name="bell" size={17}/>{locale==="ta"?"அறிவிப்புகள்":"Notifications"}{notificationCount>0&&<small className="nav-notification-count">{notificationCount>99?"99+":notificationCount}</small>}</a>
-        <a className="nav-item" href="/account/sessions"><Icon name="shield" size={17}/>{locale==="ta"?"எனது சாதனங்கள்":"My devices"}</a>
-        {canReviewApprovals&&<a className="nav-item" href="/approvals"><Icon name="check" size={17}/>{locale==="ta"?"ஒப்புதல் மையம்":"Approval center"}</a>}
-        {profile.roles.some(role=>role.code==="owner")&&<a className="nav-item" href="/assistant"><Icon name="chart" size={17}/>{locale==="ta"?"உரிமையாளர் உதவியாளர்":"Owner assistant"}</a>}
-        {canAny("employees.view","attendance.view")&&<a className="nav-item" href="/people"><Icon name="users" size={17}/>{locale === "ta" ? "பணியாளர்கள் மற்றும் வருகை" : "People & attendance"}</a>}{canAny("brokers.commission.view")&&<a className="nav-item" href="/brokers"><Icon name="handshake" size={17}/>{locale === "ta" ? "தரகர் கமிஷன்" : "Broker commissions"}</a>}
-        {canAny("production.view","production.create")&&<a className="nav-item" href="/production"><Icon name="factory" size={17}/>{t("production")}</a>}
-        {canAny("stock.view")&&<a className="nav-item" href="/reports/stock"><Icon name="boxes" size={17}/>{t("stock")}</a>}
-        {canAny("sales.view","sales.create")&&<a className="nav-item" href="/sales"><Icon name="chart" size={17}/>{t("salesLoading")}</a>}
-        {canAny("loading.view","loading.create")&&<a className="nav-item" href="/loading"><Icon name="truck" size={17}/>{locale === "ta" ? "ஏற்றுதல் மற்றும் விநியோகம்" : "Loading & delivery"}</a>}
-        {canAny("purchases.view","purchases.create")&&<a className="nav-item" href="/purchases"><Icon name="shopping" size={17}/>{t("purchasesExpenses")}</a>}
-        {canAny("expenses.view","expenses.create")&&<a className="nav-item" href="/expenses"><Icon name="calculator" size={17}/>{t("expenses")}</a>}
-        {canAny("sales.view","stock.view","production.view","purchases.view","accounting.view","audit.view")&&<a className="nav-item" href="/reports"><Icon name="chart" size={17}/>{t("reports")}</a>}
-        <div className="nav-label space-top">{t("operations").toUpperCase()}</div>
-        {navItems.map(([icon, label]) => <div className="nav-item disabled" key={label}><Icon name={icon} size={17}/>{label}<small>{t("planned")}</small></div>)}
-        </nav>
-        <div className="sidebar-bottom"><div className="avatar">{profile.fullName.slice(0, 1).toUpperCase()}</div><div className="user-meta"><b>{profile.fullName}</b><span>{profile.roles.map((role) => role.code === "owner" ? t("ownerRole") : role.name).join(", ") || t("teamMember")}</span></div><button className="signout" onClick={signOut} aria-label={t("signOut")}><Icon name="logout" size={17}/></button></div>
-      </aside>
+      <WorkspaceSidebar disabled={offlineMode}/>
     <MobileNavigation active="home" disabled={offlineMode}/><section className="dashboard-main">
         <header className="topbar"><div className="breadcrumb">{t("workspace")} <span>/</span> {t("overview")}</div><div className="topbar-right"><LanguageSwitcher/>{offlineMode?<span className="notification-bell-link" aria-label={locale==="ta"?"அறிவிப்புகள்":"Notifications"} aria-disabled="true"><Icon name="bell" size={18}/>{notificationCount>0&&<span>{notificationCount>99?"99+":notificationCount}</span>}</span>:<a className="notification-bell-link" href="/notifications" aria-label={locale==="ta"?"அறிவிப்புகள்":"Notifications"}><Icon name="bell" size={18}/>{notificationCount>0&&<span>{notificationCount>99?"99+":notificationCount}</span>}</a>}<span className={`system-status${offlineMode?" offline":""}`}><Icon name={offlineMode?"alert":"check"} size={15}/>{offlineMode?t("offlineLabel"):t("systemConnected")}</span><span className="top-avatar">{profile.fullName.slice(0, 1).toUpperCase()}</span></div></header>
         <div className="dashboard-content">

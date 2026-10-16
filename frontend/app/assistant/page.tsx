@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceSidebar } from "../navigation";
 
 import { FormEvent, useEffect, useState } from "react";
 import { apiRequestError, localizedUiError, LanguageSwitcher, useLocale } from "../i18n";
@@ -87,7 +88,7 @@ export default function AssistantPage() {
 
   const formatMoney = (value: string | number) => new Intl.NumberFormat(ta ? "ta-IN" : "en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 2 }).format(Number(value));
   return <main className="dashboard-shell">
-    <aside className="sidebar"><CompanyBrand href="/dashboard"/><nav className="sidebar-navigation"><div className="nav-label">{ta ? "பணியிடம்" : "WORKSPACE"}</div><a className="nav-item" href="/dashboard"><Icon name="home" size={17}/>{words.home}</a><a className="nav-item active" href="/assistant"><Icon name="chart" size={17}/>{words.assistant}</a></nav></aside>
+    <WorkspaceSidebar/>
     <MobileNavigation active={null}/>
     <section className="dashboard-main"><header className="topbar"><div className="breadcrumb"><a href="/dashboard">{words.home}</a><span>/</span>{words.assistant}</div><div className="topbar-right"><LanguageSwitcher/></div></header>
       <div className="dashboard-content assistant-content">

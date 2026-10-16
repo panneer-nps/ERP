@@ -1,4 +1,5 @@
 "use client";
+import { WorkspaceSidebar } from "../navigation";
 
 import { useEffect, useMemo, useState } from "react";
 import { CompanyBrand, MobileNavigation } from "../navigation";
@@ -94,14 +95,7 @@ export default function OperationsPage() {
   const description = (key: ModuleKey) => key === "loading" ? w.loadingText : w[`${key}Text` as keyof typeof w];
 
   return <main className="dashboard-shell">
-    <aside className="sidebar">
-      <CompanyBrand href="/dashboard" />
-      <div className="nav-label">{w.title.toUpperCase()}</div>
-      <a className="nav-item" href="/dashboard"><Icon name="home" size={17} />{w.home}</a>
-      <a className="nav-item active" href="/operations"><Icon name="boxes" size={17} />{w.title}</a>
-      <a className="nav-item" href="/approvals"><Icon name="check" size={17} />{w.approvals}</a>
-      <a className="nav-item" href="/reports"><Icon name="chart" size={17} />{w.reports}</a>
-    </aside>
+    <WorkspaceSidebar/>
     <MobileNavigation active="operations" />
     <section className="dashboard-main">
       <header className="topbar"><div className="breadcrumb"><a href="/dashboard">{w.home}</a><span>/</span>{w.title}</div><div className="topbar-right"><LanguageSwitcher /></div></header>
